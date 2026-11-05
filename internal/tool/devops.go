@@ -69,7 +69,7 @@ func (d *DevOpsTool) Execute(ctx context.Context, args map[string]any) (string, 
 		// Sanitize environment to prevent leaking secrets
 		cmd.Env = security.SanitizedEnviron()
 
-		out, err := runWithLimit(cmd, maxDevopsOutput)
+		out, err := runWithLimit(cmdCtx, cmd, maxDevopsOutput)
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			return fmt.Sprintf("[command timed out after %v]\n%s", devopsCmdTimeout, out)
 		}

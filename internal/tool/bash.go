@@ -72,7 +72,7 @@ func (b *BashTool) Execute(ctx context.Context, args map[string]any) (string, er
 	_ = limitWriter // we'll capture into limited buffer
 
 	// Run command and capture combined stdout/stderr up to maxBashOutputBytes
-	out, err := runWithLimit(cmd, maxBashOutputBytes)
+	out, err := runWithLimit(cmdCtx, cmd, maxBashOutputBytes)
 	if cmdCtx.Err() == context.DeadlineExceeded {
 		return fmt.Sprintf("%s\n[command timed out after %v]", out, defaultCmdTimeout), nil
 	}
@@ -82,7 +82,7 @@ func (b *BashTool) Execute(ctx context.Context, args map[string]any) (string, er
 	return out, nil
 }
 
-func runWithLimit(cmd *exec.Cmd, limit int64) (string, error) {
+func runWithLimit(ctx context.Context, cmd *exec.Cmd, limit int64) (string, error) {
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -99,11 +99,11 @@ func runWithLimit(cmd *exec.Cmd, limit int64) (string, error) {
 
 	var waitErr error
 	select {
-	case <-cmd.Context().Done():
+	case <-ctx.Done():
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
-		waitErr = cmd.Context().Err()
+		waitErr = ctx.Err()
 	case waitErr = <-done:
 	}
 
