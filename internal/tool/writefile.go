@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"agent-harness/Squib/internal/api"
+	"agent-harness/Squib/internal/security"
 )
+
+const maxWriteFileBytes = 1024 * 1024 // 1 MB limit
 
 type WriteFileTool struct{}
 
@@ -17,13 +21,13 @@ func NewWriteFileTool() *WriteFileTool {
 func (w *WriteFileTool) Definition() api.ToolDef {
 	return api.ToolDef{
 		Name:        "write_file",
-		Description: "Write content to a file at the specified path (creating or overwriting).",
+		Description: "Write content to a file at the specified path within the workspace (up to 1MB).",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"path": map[string]any{
 					"type":        "string",
-					"description": "Path to the file to write.",
+					"description": "Path to the file to write (must be within workspace).",
 				},
 				"content": map[string]any{
 					"type":        "string",
@@ -45,7 +49,22 @@ func (w *WriteFileTool) Execute(ctx context.Context, args map[string]any) (strin
 		return "", fmt.Errorf("missing or invalid 'content' argument")
 	}
 
-	err := os.WriteFile(path, []byte(content), 0644)
+	if len(content) > maxWriteFileBytes {
+		return "", fmt.Errorf("content size (%d bytes) exceeds maximum limit of %d bytes (1MB)", len(content), maxWriteFileBytes)
+	}
+
+	safePath, err := security.ValidateSafePath(path)
+	if err != nil {
+		return "", err
+	}
+
+	// Ensure parent directory exists within workspace
+	dir := filepath.Dir(safePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	err = os.WriteFile(safePath, []byte(content), 0644)
 	if err != nil {
 		return "", err
 	}

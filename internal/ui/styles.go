@@ -9,6 +9,8 @@ package ui
 import (
 	"fmt"
 	"os"
+
+	"agent-harness/Squib/internal/security"
 )
 
 // rgb is a 24-bit color.
@@ -83,11 +85,12 @@ func Prompt() string {
 
 // ToolCall formats the line shown when the agent invokes a tool.
 func ToolCall(name, args string) string {
+	cleanArgs := security.SanitizeTerminal(args)
 	const maxArgs = 90
-	if len(args) > maxArgs {
-		args = args[:maxArgs] + "…"
+	if len(cleanArgs) > maxArgs {
+		cleanArgs = cleanArgs[:maxArgs] + "…"
 	}
-	return paint(colorBlue, "  → ") + paintBold(colorCyan, name) + " " + paint(colorGray, args)
+	return paint(colorBlue, "  → ") + paintBold(colorCyan, name) + " " + paint(colorGray, cleanArgs)
 }
 
 // Warn styles a warning message (yellow).

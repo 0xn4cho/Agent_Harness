@@ -10,9 +10,13 @@ import (
 	"time"
 
 	"agent-harness/Squib/internal/api"
+	"agent-harness/Squib/internal/security"
 )
 
-const defaultAPIURL = "https://api.groq.com/openai/v1/chat/completions"
+const (
+	defaultAPIURL            = "https://api.groq.com/openai/v1/chat/completions"
+	maxHTTPResponseBodyBytes = 2 * 1024 * 1024 // 2 MiB limit
+)
 
 type GroqProvider struct {
 	apiKey     string
@@ -145,14 +149,21 @@ func (g *GroqProvider) Send(ctx context.Context, messages []api.Message, tools [
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	// Limit response body reading to maxHTTPResponseBodyBytes to prevent memory exhaustion
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPResponseBodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet := security.SanitizeTerminal(security.TruncateString(string(body), 250))
+		return nil, fmt.Errorf("groq API HTTP %d error: %s", resp.StatusCode, snippet)
+	}
+
 	var parsed groqChatResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w (body: %s)", err, string(body))
+		snippet := security.SanitizeTerminal(security.TruncateString(string(body), 250))
+		return nil, fmt.Errorf("unmarshal response: %w (body snippet: %s)", err, snippet)
 	}
 
 	if parsed.Error != nil {
