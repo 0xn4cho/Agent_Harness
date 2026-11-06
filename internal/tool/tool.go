@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"sort"
 
 	"agent-harness/Squib/internal/api"
 )
@@ -31,9 +32,15 @@ func (r *Registry) Get(name string) (Tool, bool) {
 }
 
 func (r *Registry) Definitions() []api.ToolDef {
-	var defs []api.ToolDef
-	for _, t := range r.tools {
-		defs = append(defs, t.Definition())
+	names := make([]string, 0, len(r.tools))
+	for name := range r.tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	defs := make([]api.ToolDef, 0, len(names))
+	for _, name := range names {
+		defs = append(defs, r.tools[name].Definition())
 	}
 	return defs
 }

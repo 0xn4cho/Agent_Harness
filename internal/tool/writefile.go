@@ -10,7 +10,7 @@ import (
 	"agent-harness/Squib/internal/security"
 )
 
-const maxWriteFileBytes = 1024 * 1024 // 1 MB limit
+const maxWriteFileBytes = 1024 * 1024
 
 type WriteFileTool struct{}
 
@@ -58,7 +58,6 @@ func (w *WriteFileTool) Execute(ctx context.Context, args map[string]any) (strin
 		return "", err
 	}
 
-	// Ensure parent directory exists within workspace
 	dir := filepath.Dir(safePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)

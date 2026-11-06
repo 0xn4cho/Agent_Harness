@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agent-harness/Squib/internal/api"
+	"agent-harness/Squib/internal/compact"
 	"agent-harness/Squib/internal/permission"
 	"agent-harness/Squib/internal/provider"
 	"agent-harness/Squib/internal/security"
@@ -28,44 +29,58 @@ Guidelines:
 5. Keep responses direct, helpful, and concise.`
 
 const (
-	maxScannerCapacity = 1024 * 1024 // 1 MB buffer for long user inputs
-	maxHistoryMessages = 25          // Limit conversation history to prevent uncontrolled growth
-	maxToolOutputChars = 8000        // Truncate tool output in history to avoid context flooding
+	maxScannerCapacity = 1024 * 1024
+	maxHistoryMessages = compact.DefaultMaxMessages
+	maxHistoryTokens   = compact.DefaultMaxTokens
+	maxToolOutputChars = 8000
 	turnTimeout        = 5 * time.Minute
 )
 
 func main() {
+	useMock := strings.EqualFold(strings.TrimSpace(os.Getenv("SQUIB_PROVIDER")), "mock")
+	for _, arg := range os.Args[1:] {
+		if arg == "--mock" || arg == "-mock" {
+			useMock = true
+		}
+	}
+
 	model := os.Getenv("GROQ_MODEL")
-	if model == "" {
+	if useMock {
+		model = "mock-model"
+	} else if model == "" {
 		model = "openai/gpt-oss-120b"
 	}
 
-	// 0. Banner de bienvenida (pulpo + logo SQUIB)
 	fmt.Print(ui.Banner(model))
 
-	apiKey := strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
-	if apiKey == "" {
-		fmt.Fprintln(os.Stderr, ui.Error("\nError: GROQ_API_KEY environment variable is not set."))
-		fmt.Fprintln(os.Stderr, ui.Dim("Set it in PowerShell: $env:GROQ_API_KEY='gsk_...'"))
-		os.Exit(1)
+	var p provider.Provider
+	if useMock {
+		p = provider.NewMock()
+		fmt.Println(ui.Dim("  [Modo Mock activado — ejecutando sin llamadas a API externa]"))
+	} else {
+		apiKey := strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
+		if apiKey == "" {
+			fmt.Fprintln(os.Stderr, ui.Error("\nError: GROQ_API_KEY environment variable is not set."))
+			fmt.Fprintln(os.Stderr, ui.Dim("Temporary (current session): $env:GROQ_API_KEY='gsk_...'"))
+			fmt.Fprintln(os.Stderr, ui.Dim("Permanent (Windows User):    [System.Environment]::SetEnvironmentVariable('GROQ_API_KEY', 'gsk_...', 'User')"))
+			fmt.Fprintln(os.Stderr, ui.Dim("Offline Mock Mode:           go run . --mock"))
+			os.Exit(1)
+		}
+		p = provider.NewGroq(apiKey, model)
 	}
 
-	// 1. Inicializar el Provider (Groq)
-	p := provider.NewGroq(apiKey, model)
-
-	// 2. Registrar herramientas de Código y DevOps
 	reg := tool.NewRegistry()
 	reg.Register(tool.NewBashTool())
 	reg.Register(tool.NewReadFileTool())
 	reg.Register(tool.NewWriteFileTool())
 	reg.Register(tool.NewDevOpsTool())
 
-	// 3. Crear el Permission Gate con scanner configurado con buffer ampliado
 	scanner := bufio.NewScanner(os.Stdin)
 	buf := make([]byte, 64*1024)
 	scanner.Buffer(buf, maxScannerCapacity)
 
 	gate := permission.NewGate(scanner)
+	compactor := compact.NewSlidingWindow(maxHistoryTokens, maxHistoryMessages)
 
 	messages := []api.Message{{Role: "system", Content: systemPrompt}}
 
@@ -85,9 +100,21 @@ func main() {
 			fmt.Println(ui.Accent("¡Hasta luego! 🐙"))
 			return
 		}
+		if input == "/compact" {
+			beforeMsgs, beforeTok := len(messages), compact.EstimateTokens(messages)
+			summarizer := &compact.Summarize{Provider: p, MaxTokens: 1, Threshold: 1, KeepRecent: 4}
+			if compacted, err := summarizer.Compact(context.Background(), messages); err == nil {
+				messages = compacted
+			}
+			fmt.Println(ui.Dim(fmt.Sprintf("  [Contexto compactado: %d -> %d mensajes | ~%d -> ~%d tokens]",
+				beforeMsgs, len(messages), beforeTok, compact.EstimateTokens(messages))))
+			continue
+		}
 
 		messages = append(messages, api.Message{Role: "user", Content: input})
-		messages = pruneMessages(messages, maxHistoryMessages)
+		if compacted, err := compactor.Compact(context.Background(), messages); err == nil {
+			messages = compacted
+		}
 
 		turnCtx, cancel := context.WithTimeout(context.Background(), turnTimeout)
 		messages = agentLoop(turnCtx, p, reg, gate, messages)
@@ -98,8 +125,13 @@ func main() {
 func agentLoop(ctx context.Context, p provider.Provider, reg *tool.Registry, gate *permission.Gate, messages []api.Message) []api.Message {
 	const maxRounds = 10
 	toolDefs := reg.Definitions()
+	compactor := compact.NewSlidingWindow(maxHistoryTokens, maxHistoryMessages)
 
 	for round := 0; round < maxRounds; round++ {
+		if compacted, err := compactor.Compact(ctx, messages); err == nil {
+			messages = compacted
+		}
+
 		respMsg, err := p.Send(ctx, messages, toolDefs)
 		if err != nil {
 			fmt.Println(ui.Error(fmt.Sprintf("API error: %v", err)))
@@ -117,7 +149,6 @@ func agentLoop(ctx context.Context, p provider.Provider, reg *tool.Registry, gat
 		}
 
 		for _, tc := range respMsg.ToolCalls {
-			// Sanitize arguments against ANSI escape injection before printing
 			cleanArgs := security.SanitizeTerminal(tc.Arguments)
 			fmt.Println(ui.ToolCall(tc.Name, cleanArgs))
 
@@ -131,7 +162,6 @@ func agentLoop(ctx context.Context, p provider.Provider, reg *tool.Registry, gat
 				continue
 			}
 
-			// Chapter 02: The Permission Gate
 			if !gate.Ask(tc.Name, tc.Arguments) {
 				messages = append(messages, api.Message{
 					Role:       "tool",
@@ -156,7 +186,6 @@ func agentLoop(ctx context.Context, p provider.Provider, reg *tool.Registry, gat
 				output = fmt.Sprintf("[error: %v]", err)
 			}
 
-			// Limit tool output stored in history to avoid memory bloat and context flooding
 			if len(output) > maxToolOutputChars {
 				output = output[:maxToolOutputChars] + "\n... [tool output truncated for context limit]"
 			}
@@ -173,39 +202,17 @@ func agentLoop(ctx context.Context, p provider.Provider, reg *tool.Registry, gat
 	return messages
 }
 
-// pruneMessages limits the conversation history while preserving the system prompt
-// and avoiding splitting assistant tool_calls from their tool responses.
 func pruneMessages(msgs []api.Message, max int) []api.Message {
-	if len(msgs) <= max {
+	return pruneMessagesByTokens(msgs, max, maxHistoryTokens)
+}
+
+func pruneMessagesByTokens(msgs []api.Message, maxMsgs, maxTokens int) []api.Message {
+	sw := compact.NewSlidingWindow(maxTokens, maxMsgs)
+	compacted, err := sw.Compact(context.Background(), msgs)
+	if err != nil {
 		return msgs
 	}
-
-	system := msgs[0]
-	// Start searching for a user message boundary starting from len(msgs) - max
-	startIdx := len(msgs) - max
-	if startIdx < 1 {
-		startIdx = 1
-	}
-
-	// Advance to the nearest 'user' message to maintain valid dialogue structure
-	for startIdx < len(msgs) && msgs[startIdx].Role != "user" {
-		startIdx++
-	}
-
-	if startIdx >= len(msgs) {
-		// Fallback: keep at least the last user message
-		for i := len(msgs) - 1; i >= 1; i-- {
-			if msgs[i].Role == "user" {
-				return append([]api.Message{system}, msgs[i:]...)
-			}
-		}
-		return msgs
-	}
-
-	pruned := make([]api.Message, 0, 1+len(msgs[startIdx:]))
-	pruned = append(pruned, system)
-	pruned = append(pruned, msgs[startIdx:]...)
-	return pruned
+	return compacted
 }
 
 func visibleContent(content string) string {

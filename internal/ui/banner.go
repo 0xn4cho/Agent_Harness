@@ -6,16 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// octopus is Squib's mascot as pixel art. Every pixel is TWO characters wide
-// ("██", "▓▓", "▒▒", "░░" or two spaces), and the shade of the block selects
-// the color:
-//
-//	█ outline  ▓ dark shade  ▒ mid shade  ░ highlight
-//
-// It is not printed as-is: octopusPixels turns it into a pixel grid and
-// renderOctopus draws it with half blocks (▀), packing 2x2 characters into a
-// single terminal cell. That shrinks it from 60x32 to 30x16 without losing
-// detail.
 var octopus = []string{
 	`                                  ▒▒▒▒▓▓▓▓██`,
 	`                              ▓▓▒▒▒▒▒▒▒▒▒▒▒▒▓▓██`,
@@ -51,8 +41,6 @@ var octopus = []string{
 	`                                      ▓▓▓▓▓▓▓▓`,
 }
 
-// Letters in the "ANSI Shadow" figlet style. Each letter has 6 rows and all
-// rows of a letter have the same width, so they can be concatenated safely.
 var (
 	letterS = []string{"███████╗", "██╔════╝", "███████╗", "╚════██║", "███████║", "╚══════╝"}
 	letterQ = []string{" ██████╗ ", "██╔═══██╗", "██║   ██║", "██║▄▄ ██║", "╚██████╔╝", " ╚══▀▀═╝ "}
@@ -61,7 +49,6 @@ var (
 	letterB = []string{"██████╗ ", "██╔══██╗", "██████╔╝", "██╔══██╗", "██████╔╝", "╚═════╝ "}
 )
 
-// logo returns the word SQUIB built from the letters above.
 func logo() []string {
 	letters := [][]string{letterS, letterQ, letterU, letterI, letterB}
 	rows := make([]string, len(letterS))
@@ -75,16 +62,12 @@ func logo() []string {
 	return rows
 }
 
-// Banner renders the startup screen: the small octopus on the left and, next
-// to it, the SQUIB logo (blue -> cyan -> white gradient), a tagline and the
-// model name, vertically centered.
 func Banner(model string) string {
 	left := renderOctopus()
 	right := logo()
 	logoWidth := maxWidth(right)
 
-	// Right column: logo + empty line + tagline + model.
-	right = append(right, "", "tagline", "model")
+	right = append(right, "", "tagline", "model", "author")
 	top := (len(left) - len(right)) / 2
 	if top < 0 {
 		top = 0
@@ -108,6 +91,10 @@ func Banner(model string) string {
 			case right[j] == "model":
 				b.WriteString(Dim("model: ") + paint(colorCyan, model))
 
+			case right[j] == "author":
+				b.WriteString(paintBold(colorWhite, "Author: ") + paint(colorRed, "github.com/0xn4cho"))
+			}
+
 		}
 		b.WriteString("\n")
 	}
@@ -121,10 +108,6 @@ func Banner(model string) string {
 	return b.String()
 }
 
-// ---- Octopus rendering ----
-
-// octopusPixels converts the art into a grid of shades (one rune per pixel,
-// ' ' means transparent), taking the first character of every 2-char pixel.
 func octopusPixels() [][]rune {
 	cols := 0
 	grid := make([][]rune, len(octopus))
@@ -137,7 +120,6 @@ func octopusPixels() [][]rune {
 			cols = len(grid[y])
 		}
 	}
-	// Pad every row to the same width so the art stays rectangular.
 	for y := range grid {
 		for len(grid[y]) < cols {
 			grid[y] = append(grid[y], ' ')
@@ -148,8 +130,6 @@ func octopusPixels() [][]rune {
 
 func octopusWidth() int { return len(octopusPixels()[0]) }
 
-// shadeColor maps a shading block to a palette color. Mid tones shift from
-// cyan (head) to blue (tentacles) depending on the pixel row.
 func shadeColor(shade rune, y, height int) rgb {
 	switch shade {
 	case '█':
@@ -158,14 +138,11 @@ func shadeColor(shade rune, y, height int) rgb {
 		return colorBlue
 	case '░':
 		return colorWhite
-	default: // '▒'
+	default:
 		return gradient([]rgb{colorCyan, colorBlue}, 0.6*float64(y)/float64(height-1))
 	}
 }
 
-// renderOctopus draws two pixel rows per terminal line using the upper half
-// block '▀': its foreground paints the top pixel and its background paints
-// the bottom one.
 func renderOctopus() []string {
 	grid := octopusPixels()
 	height := len(grid)
@@ -186,11 +163,10 @@ func renderOctopus() []string {
 	return lines
 }
 
-// halfBlockCell renders one terminal cell holding two vertical pixels.
 func halfBlockCell(top, bot rune, y, height int) string {
 	hasTop, hasBot := top != ' ', bot != ' '
 
-	if !enabled { // no colors: use the shapes only
+	if !enabled {
 		switch {
 		case hasTop && hasBot:
 			return "█"
@@ -216,10 +192,6 @@ func halfBlockCell(top, bot rune, y, height int) string {
 	}
 }
 
-// ---- Logo rendering ----
-
-// paintLogoLine colors a row of the logo: solid blocks get a horizontal
-// blue -> cyan -> white gradient, the "shadow" box-drawing chars stay deep blue.
 func paintLogoLine(line string, width int) string {
 	if !enabled {
 		return line
@@ -234,7 +206,7 @@ func paintLogoLine(line string, width int) string {
 			b.WriteRune(r)
 		case '█', '▄', '▀':
 			b.WriteString(paint(gradient(stops, float64(col)/float64(width-1)), string(r)))
-		default: // ╗ ╔ ═ ╝ ║ ╚
+		default:
 			b.WriteString(paint(colorDeepBlue, string(r)))
 		}
 		col++

@@ -10,7 +10,7 @@ import (
 	"agent-harness/Squib/internal/security"
 )
 
-const maxReadFileBytes = 256 * 1024 // 256 KiB limit
+const maxReadFileBytes = 256 * 1024
 
 type ReadFileTool struct{}
 
@@ -60,7 +60,6 @@ func (r *ReadFileTool) Execute(ctx context.Context, args map[string]any) (string
 	}
 	defer f.Close()
 
-	// Read with size limit to prevent memory exhaustion
 	limitReader := io.LimitReader(f, maxReadFileBytes+1)
 	data, err := io.ReadAll(limitReader)
 	if err != nil {

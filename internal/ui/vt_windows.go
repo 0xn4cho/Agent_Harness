@@ -1,5 +1,3 @@
-//go:build windows
-
 package ui
 
 import (
@@ -7,9 +5,6 @@ import (
 	"syscall"
 )
 
-// enableVirtualTerminal turns on ANSI escape-code processing in the Windows
-// console (ENABLE_VIRTUAL_TERMINAL_PROCESSING). Windows Terminal already has
-// it on, but the classic console (conhost) needs it to be enabled explicitly.
 func enableVirtualTerminal() bool {
 	const enableVirtualTerminalProcessing = 0x0004
 

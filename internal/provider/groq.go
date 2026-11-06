@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultAPIURL            = "https://api.groq.com/openai/v1/chat/completions"
-	maxHTTPResponseBodyBytes = 2 * 1024 * 1024 // 2 MiB limit
+	maxHTTPResponseBodyBytes = 2 * 1024 * 1024
 )
 
 type GroqProvider struct {
@@ -71,10 +71,10 @@ type groqMessage struct {
 }
 
 type groqChatRequest struct {
-	Model       string          `json:"model"`
-	Messages    []groqMessage   `json:"messages"`
-	Tools       []groqToolDef   `json:"tools,omitempty"`
-	Temperature float64         `json:"temperature"`
+	Model       string        `json:"model"`
+	Messages    []groqMessage `json:"messages"`
+	Tools       []groqToolDef `json:"tools,omitempty"`
+	Temperature float64       `json:"temperature"`
 }
 
 type groqChatResponse struct {
@@ -111,8 +111,6 @@ func (g *GroqProvider) Send(ctx context.Context, messages []api.Message, tools [
 			tcs = append(tcs, item)
 		}
 		content := m.Content
-		// Groq requires 'content' on tool messages; an empty string would be
-		// dropped by omitempty, so send a placeholder instead.
 		if m.Role == "tool" && content == "" {
 			content = "(command completed with no output)"
 		}
@@ -149,7 +147,6 @@ func (g *GroqProvider) Send(ctx context.Context, messages []api.Message, tools [
 	}
 	defer resp.Body.Close()
 
-	// Limit response body reading to maxHTTPResponseBodyBytes to prevent memory exhaustion
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPResponseBodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
