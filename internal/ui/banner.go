@@ -84,7 +84,7 @@ func Banner(model string) string {
 	logoWidth := maxWidth(right)
 
 	// Right column: logo + empty line + tagline + model.
-	right = append(right, "", "tagline", "model", "author")
+	right = append(right, "", "tagline", "model")
 	top := (len(left) - len(right)) / 2
 	if top < 0 {
 		top = 0
@@ -107,10 +107,6 @@ func Banner(model string) string {
 					paintBold(colorWhite, "Kubernetes"))
 			case right[j] == "model":
 				b.WriteString(Dim("model: ") + paint(colorCyan, model))
-
-			case right[j] == "author":
-				b.WriteString(paintBold(colorWhite, "Author:") + paint(colorRed, "0xn4cho"))
-			}
 
 		}
 		b.WriteString("\n")
