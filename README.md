@@ -184,6 +184,3 @@ La estructura principal del proyecto es:
     └── ui/                 # Estilos y banner de terminal
 ```
 
-## Licencia
-
-Añade aquí la licencia elegida para el proyecto antes de publicar una versión abierta.
