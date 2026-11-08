@@ -1,4 +1,4 @@
-# Squib 🐙
+# SquibCode 🫍
 
 Agente de código y DevOps para terminal, escrito en Go y pensado para Windows. Squib se conecta a Groq para interpretar tus peticiones y, con tu autorización, puede inspeccionar código, crear o modificar archivos dentro del proyecto, ejecutar comandos de PowerShell y consultar el estado de Docker o Kubernetes.
 
