@@ -68,6 +68,7 @@ func main() {
 		}
 		p = provider.NewGroq(apiKey, model)
 	}
+	fmt.Println(ui.Welcome())
 
 	reg := tool.NewRegistry()
 	reg.Register(tool.NewBashTool())

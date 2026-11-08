@@ -64,7 +64,7 @@ func gradient(stops []rgb, t float64) rgb {
 }
 
 func Prompt() string {
-	return paintBold(colorCyan, "squib") + paint(colorBlue, " $> ")
+	return paintBold(colorCyan, "> ")
 }
 
 func ToolCall(name, args string) string {
