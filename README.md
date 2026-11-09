@@ -1,8 +1,8 @@
 # SquibCode 🫍
 
-Agente de código y DevOps para terminal, escrito en Go y pensado para Windows. Squib se conecta a Groq para interpretar tus peticiones y, con tu autorización, puede inspeccionar código, crear o modificar archivos dentro del proyecto, ejecutar comandos de PowerShell y consultar el estado de Docker o Kubernetes.
+Agente de código y DevOps para terminal, escrito en Go y pensado para Windows. SquibCode se conecta a Groq para interpretar tus peticiones y, con tu autorización, puede inspeccionar código, crear o modificar archivos dentro del proyecto, ejecutar comandos de PowerShell y consultar el estado de Docker o Kubernetes.
 
-> Squib es un agente con acceso a herramientas locales. Revisa siempre la operación y el diff antes de aprobar una escritura o un comando.
+> SquibCode es un agente con acceso a herramientas locales. Revisa siempre la operación y el diff antes de aprobar una escritura o un comando.
 
 ## Qué puede hacer
 
@@ -44,7 +44,7 @@ Para guardarla para tu usuario de Windows:
 
 Cierra y abre una nueva terminal después de usar la configuración permanente. No subas nunca esa clave a Git ni la guardes en archivos `.env` que vayan a compartirse.
 
-### 3. Ejecuta Squib
+### 3. Ejecuta SquibCode
 
 ```powershell
 go run .
