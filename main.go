@@ -98,7 +98,7 @@ func main() {
 			continue
 		}
 		if input == "exit" || input == "quit" {
-			fmt.Println(ui.Accent("¡Hasta luego! 🐙"))
+			fmt.Println(ui.Accent("¡Hasta luego!"))
 			return
 		}
 		if input == "/compact" {
