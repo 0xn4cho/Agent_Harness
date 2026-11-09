@@ -24,8 +24,8 @@ Agente de código y DevOps para terminal, escrito en Go y pensado para Windows. 
 ### 1. Clona el repositorio
 
 ```powershell
-git clone <URL-DEL-REPOSITORIO>
-cd Squib
+git clone https://github.com/0xn4cho/Agent_Harness
+cd Agent_Harness
 ```
 
 ### 2. Configura la clave de Groq
@@ -77,7 +77,7 @@ Para salir, escribe `exit` o `quit`.
 
 ## Ejecutable opcional
 
-Puedes compilar un binario para no depender de `go run`:
+El repositorio no incluye binarios: compila tu propio ejecutable para no depender de `go run`:
 
 ```powershell
 go build -o squib.exe .
@@ -117,6 +117,8 @@ El agente tiene un máximo de rondas por turno, un timeout global de cinco minut
 | `write_file` | Crea o reemplaza un archivo del workspace. |
 | `bash` | Ejecuta un comando de PowerShell desde el workspace. |
 | `devops_status` | Muestra el estado de Docker, Kubernetes o ambos. |
+
+> **Alcance DevOps:** `devops_status` es de solo lectura: ejecuta únicamente `docker ps` y `kubectl get pods -A`. No valida ni despliega nada por sí misma. Para crear Dockerfiles, `docker-compose.yml` o manifiestos de Kubernetes, el agente usa `write_file`, así que el contenido lo genera el modelo y puede contener errores. Valida siempre el resultado antes de usarlo, por ejemplo con `docker compose config` o `kubectl apply --dry-run=client -f <fichero>`. Cualquier comando de validación o despliegue pasa por `bash` y requiere tu aprobación.
 
 Ejemplos de peticiones:
 

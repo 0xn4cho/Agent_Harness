@@ -1,0 +1,11 @@
+# Binarios compilados
+*.exe
+*.exe~
+*.test
+*.out
+
+# Secretos y configuración local
+.env
+.env.*
+k8s-config.yaml
+kubeconfig
