@@ -3,15 +3,19 @@ package ui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 )
 
 const (
-	bannerVersion = "v1.0.0"
-	leftPanel     = 58
-	rightPanel    = 22
-	bannerWidth   = leftPanel + rightPanel + 1
+	bannerBrand    = "  SC  "
+	bannerVersion  = "v0.1"
+	bannerSubtitle = "experimental agent harness · local tools + human approval"
+	bannerWidth    = 74
+	leftColWidth   = 40
+	rightColWidth  = 33
+	cmdColWidth    = 38
 )
 
 // Banner keeps the identity and useful startup details together while leaving
@@ -19,200 +23,115 @@ const (
 func Banner(model string) string {
 	directory, err := os.Getwd()
 	if err != nil {
-		directory = "directorio no disponible"
+		directory = "unavailable"
 	}
-
-	left := append(orcaMark(), "",
-		info("Modelo", model, leftPanel),
-		info("Directorio", shortenPath(directory, leftPanel-utf8.RuneCountInString("  Directorio: ")), leftPanel),
-		info("Autor", "github.com/0xn4cho", leftPanel),
-	)
-	right := capabilities()
-	height := max(len(left), len(right))
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(border("┌", "─", "┐"))
+	b.WriteString(boxBorder(colorBoxBorder, "╭", "─", "╮") + "\n")
+	b.WriteString(boxLine(colorBoxBorder, "  "+paint(colorBoxBorder, "╭──────╮")+"  "+paintBold(colorTitleBlue, "SquibCode")+"  "+paint(colorSecondary, bannerVersion)) + "\n")
+	b.WriteString(boxLine(colorBoxBorder, "  "+paint(colorBoxBorder, "│")+paintBold(colorTitleBlue, bannerBrand)+paint(colorBoxBorder, "│")+"  "+paint(colorSecondary, bannerSubtitle)) + "\n")
+	b.WriteString(boxLine(colorBoxBorder, "  "+paint(colorBoxBorder, "╰──────╯")+"  "+paint(colorBoxBorder, strings.Repeat("─", 60))) + "\n")
+	b.WriteString(boxLine(colorBoxBorder, "") + "\n")
+	b.WriteString(splitBoxLine(
+		metaItem("◈", "Model", 9, shorten(model, 23), colorData),
+		metaItem("✦", "Tools", 8, "4 available", colorData),
+	) + "\n")
+	b.WriteString(splitBoxLine(
+		metaItem("■", "Workspace", 9, formatWorkspace(directory, 23), colorData),
+		metaItem("●", "Approval", 8, "Human approval", colorGreen),
+	) + "\n")
+	b.WriteString(splitBoxLine(
+		metaItem("●", "Author", 9, shorten("github.com/0xn4cho", 23), colorData),
+		"",
+	) + "\n")
+	b.WriteString(boxBorder(colorBoxBorder, "╰", "─", "╯") + "\n")
 	b.WriteString("\n")
-	b.WriteString(singleLine("  "+paintBold(colorCyan, "SquibCode")+" "+paint(colorGray, bannerVersion), 0))
+	b.WriteString(Welcome() + "\n")
+	b.WriteString("    " + paint(colorSecondary, "Your local AI development environment is ready.") + "\n")
+	b.WriteString("    " + paint(colorSecondary, "Ask me to develop, analyze or troubleshoot your projects.") + "\n")
 	b.WriteString("\n")
-	b.WriteString(border("├", "─", "┤"))
-	b.WriteString("\n")
-
-	for i := 0; i < height; i++ {
-		leftLine, rightLine := "", ""
-		if i < len(left) {
-			leftLine = left[i]
-		}
-		if i < len(right) {
-			rightLine = right[i]
-		}
-		b.WriteString(splitLine(leftLine, rightLine))
-		b.WriteString("\n")
-	}
-
-	b.WriteString(border("└", "─", "┘"))
-	b.WriteString("\n")
+	b.WriteString(boxBorder(colorPanelBorder, "╭", "─", "╮") + "\n")
+	b.WriteString(boxLine(colorPanelBorder, "  "+paintBold(colorYellow, "✦")+" "+paintBold(colorTitleBlue, "QUICK COMMANDS")) + "\n")
+	b.WriteString(cmdRow(quickCmd("/compact", "Compact context"), quickCmd("exit", "Exit SquibCode")) + "\n")
+	b.WriteString(boxBorder(colorPanelBorder, "╰", "─", "╯") + "\n")
 	return b.String()
 }
 
 func Welcome() string {
-	return paintBold(colorWhite, "  Bienvenido a SquibCode") + paint(colorGray, " — listo para programar y resolver tareas DevOps.")
+	return "  " + paintBold(colorTitleBlue, ">") + " " + paintBold(colorData, "Welcome to SquibCode!")
 }
 
-func capabilities() []string {
-	return []string{
-		"",
-		"  " + paintBold(colorYellow, "Capacidades"),
-		"  " + paintBold(colorWhite, "• Coding"),
-		"  " + paintBold(colorCyan, "• Docker"),
-		"  " + paintBold(colorWhite, "• Kubernetes"),
+func metaItem(icon, label string, labelWidth int, value string, valueColor rgb) string {
+	return "  " + paint(colorTitleBlue, icon) + " " +
+		paint(colorSecondary, fmt.Sprintf("%-*s :", labelWidth, label)) + " " +
+		paint(valueColor, value)
+}
+
+func splitBoxLine(left, right string) string {
+	leftPad := max(0, leftColWidth-visibleWidth(left))
+	rightPad := max(0, rightColWidth-visibleWidth(right))
+	return paint(colorBoxBorder, "│") +
+		left + strings.Repeat(" ", leftPad) +
+		paint(colorBoxBorder, "│") +
+		right + strings.Repeat(" ", rightPad) +
+		paint(colorBoxBorder, "│")
+}
+
+func quickCmd(cmd, desc string) string {
+	return paint(colorCmdBlue, fmt.Sprintf("%-9s", cmd)) + paint(colorSecondary, " · "+desc)
+}
+
+func cmdRow(left, right string) string {
+	leftPad := max(0, cmdColWidth-visibleWidth(left))
+	return boxLine(colorPanelBorder, "  "+left+strings.Repeat(" ", leftPad)+right)
+}
+
+func boxBorder(c rgb, left, fill, right string) string {
+	return paint(c, left+strings.Repeat(fill, bannerWidth)+right)
+}
+
+func boxLine(c rgb, content string) string {
+	padding := max(0, bannerWidth-visibleWidth(content))
+	return paint(c, "│") + content + strings.Repeat(" ", padding) + paint(c, "│")
+}
+
+func formatWorkspace(directory string, maxLen int) string {
+	if directory == "" || directory == "unavailable" {
+		return "unavailable"
 	}
-}
-
-var orcaPixels = []string{
-	".............................BB.....................",
-	"............................BBB.....................",
-	"...........................BBBB.....................",
-	"..........................BBBBBB....................",
-	"........................BBBBBBBB....................",
-	"......................BBBBBBBBBBB...................",
-	"............BBBBBBBBBBBBBBBBBBBBBBBBB............BBB",
-	"........BBBBBBBBBBBBBBBBBBBBBBBGGGGGBBBB.......BBBBB",
-	".....BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB...BBBBBB.",
-	"...BBBBBBBBWWWWWBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB....",
-	"..BBBBBBBBBBWWWWWBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.....",
-	".BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWWWWBBBBBBBBBBB......",
-	".BWWWWWWWBBBBBBBBBBBBBBBBBBBWWWWWWWWWBBBB....BBBBB..",
-	"..BWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWB........BBBBBB",
-	"....BWWWWWWWWWWWWWWWWWWWWWWWWWWWWB..............BBBB",
-	".......BWWWWWWBBBBBWWWWWWWWWB.......................",
-	"...............BBBBB................................",
-	".................BBB................................",
-}
-
-var (
-	orcaBack  = rgb{18, 42, 100}
-	orcaBelly = rgb{40, 95, 215}
-)
-
-func orcaMark() []string {
-	height := len(orcaPixels)
-	margin := strings.Repeat(" ", max(0, (leftPanel-len(orcaPixels[0]))/2))
-	lines := make([]string, 0, (height+1)/2)
-	for y := 0; y < height; y += 2 {
-		var b strings.Builder
-		b.WriteString(margin)
-		for x := range orcaPixels[y] {
-			top := orcaPixels[y][x]
-			bottom := byte('.')
-			if y+1 < height {
-				bottom = orcaPixels[y+1][x]
-			}
-			b.WriteString(orcaCell(top, bottom, y, height))
-		}
-		lines = append(lines, strings.TrimRight(b.String(), " "))
+	base := filepath.Base(directory)
+	if base != "" && base != "." && base != string(filepath.Separator) && base != "/" {
+		return shorten("~/"+base, maxLen)
 	}
-	return lines
+	return shortenPath(directory, maxLen)
 }
 
-func orcaColor(pixel byte, y, height int) (rgb, bool) {
-	switch pixel {
-	case 'B':
-		return gradient([]rgb{orcaBack, orcaBelly}, float64(y)/float64(height-1)), true
-	case 'W':
-		return colorWhite, true
-	case 'G':
-		return colorGray, true
-	default:
-		return rgb{}, false
+func shorten(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
 	}
-}
-
-func orcaCell(top, bottom byte, y, height int) string {
-	if !enabled {
-		hasTop, hasBottom := top == 'B' || top == 'G', bottom == 'B' || bottom == 'G'
-		switch {
-		case hasTop && hasBottom:
-			return "█"
-		case hasTop:
-			return "▀"
-		case hasBottom:
-			return "▄"
-		default:
-			return " "
-		}
-	}
-
-	topColor, hasTop := orcaColor(top, y, height)
-	bottomColor, hasBottom := orcaColor(bottom, y+1, height)
-	switch {
-	case hasTop && hasBottom:
-		return fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm▀\x1b[0m",
-			topColor.r, topColor.g, topColor.b, bottomColor.r, bottomColor.g, bottomColor.b)
-	case hasTop:
-		return paint(topColor, "▀")
-	case hasBottom:
-		return paint(bottomColor, "▄")
-	default:
-		return " "
-	}
-}
-
-func info(label, value string, width int) string {
-	prefix := "  " + label + ": "
-	value = shorten(value, width-utf8.RuneCountInString(prefix))
-	return prefix + value
-}
-
-func border(left, fill, right string) string {
-	return paint(colorDeepBlue, left+strings.Repeat(fill, bannerWidth)+right)
-}
-
-func singleLine(content string, contentWidth int) string {
-	if contentWidth == 0 {
-		contentWidth = visibleWidth(content)
-	}
-	return paint(colorDeepBlue, "│") + content + strings.Repeat(" ", bannerWidth-contentWidth) + paint(colorDeepBlue, "│")
-}
-
-func splitLine(left, right string) string {
-	return paint(colorDeepBlue, "│") + paintInfo(left) + strings.Repeat(" ", leftPanel-visibleWidth(left)) +
-		paint(colorDeepBlue, "│") + right + strings.Repeat(" ", rightPanel-visibleWidth(right)) + paint(colorDeepBlue, "│")
-}
-
-func paintInfo(line string) string {
-	if strings.HasPrefix(line, "  Modelo: ") {
-		return "  " + paintBold(colorCyan, "Modelo:") + " " + paint(colorWhite, strings.TrimPrefix(line, "  Modelo: "))
-	}
-	if strings.HasPrefix(line, "  Directorio: ") {
-		return "  " + paintBold(colorCyan, "Directorio:") + " " + paint(colorWhite, strings.TrimPrefix(line, "  Directorio: "))
-	}
-	if strings.HasPrefix(line, "  Autor: ") {
-		return "  " + paintBold(colorCyan, "Autor:") + " " + paint(colorRed, strings.TrimPrefix(line, "  Autor: "))
-	}
-	return line
-}
-
-func shorten(s string, max int) string {
-	if utf8.RuneCountInString(s) <= max {
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
+	if maxLen == 1 {
+		return "…"
+	}
 	runes := []rune(s)
-	return "…" + string(runes[len(runes)-(max-1):])
+	return "…" + string(runes[len(runes)-(maxLen-1):])
 }
 
-func shortenPath(path string, max int) string {
-	if utf8.RuneCountInString(path) <= max {
+func shortenPath(path string, maxLen int) string {
+	if utf8.RuneCountInString(path) <= maxLen {
 		return path
 	}
-	if volume := strings.Index(path, `\`); volume > 0 && max > volume+4 {
+	if volume := strings.Index(path, `\`); volume > 0 && maxLen > volume+4 {
 		prefix := path[:volume+1] + "…\\"
-		tailLength := max - utf8.RuneCountInString(prefix)
+		tailLength := maxLen - utf8.RuneCountInString(prefix)
 		runes := []rune(path)
 		return prefix + string(runes[len(runes)-tailLength:])
 	}
-	return shorten(path, max)
+	return shorten(path, maxLen)
 }
 
 func visibleWidth(s string) int {

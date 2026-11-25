@@ -68,7 +68,6 @@ func main() {
 		}
 		p = provider.NewGroq(apiKey, model)
 	}
-	fmt.Println(ui.Welcome())
 
 	reg := tool.NewRegistry()
 	reg.Register(tool.NewBashTool())
@@ -87,6 +86,7 @@ func main() {
 
 	for {
 		fmt.Print("\n" + ui.Prompt())
+		ui.ClearPromptLine()
 		if !scanner.Scan() {
 			if err := scanner.Err(); err != nil {
 				fmt.Fprintln(os.Stderr, ui.Error(fmt.Sprintf("\nInput error: %v", err)))
