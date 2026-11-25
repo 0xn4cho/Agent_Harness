@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"agent-harness/Squib/internal/security"
 )
@@ -10,13 +11,19 @@ import (
 type rgb struct{ r, g, b uint8 }
 
 var (
-	colorDeepBlue = rgb{20, 60, 140}
-	colorBlue     = rgb{30, 100, 255}
-	colorCyan     = rgb{0, 215, 255}
-	colorWhite    = rgb{240, 250, 255}
-	colorYellow   = rgb{255, 200, 60}
-	colorRed      = rgb{255, 85, 85}
-	colorGray     = rgb{120, 135, 155}
+	colorBoxBorder   = rgb{45, 115, 195}
+	colorPanelBorder = rgb{40, 62, 98}
+	colorTitleBlue   = rgb{65, 165, 255}
+	colorCmdBlue     = rgb{85, 175, 255}
+	colorSecondary   = rgb{145, 160, 180}
+	colorData        = rgb{235, 242, 250}
+	colorGreen       = rgb{60, 205, 115}
+	colorBlue        = rgb{30, 100, 255}
+	colorCyan        = rgb{0, 215, 255}
+	colorWhite       = rgb{240, 250, 255}
+	colorYellow      = rgb{255, 200, 60}
+	colorRed         = rgb{255, 85, 85}
+	colorGray        = rgb{120, 135, 155}
 )
 
 var enabled = detectColorSupport()
@@ -46,25 +53,23 @@ func paintBold(c rgb, s string) string {
 	return fmt.Sprintf("\x1b[1;38;2;%d;%d;%dm%s\x1b[0m", c.r, c.g, c.b, s)
 }
 
-func lerp(a, b rgb, t float64) rgb {
-	mix := func(x, y uint8) uint8 { return uint8(float64(x) + (float64(y)-float64(x))*t) }
-	return rgb{mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b)}
-}
-
-func gradient(stops []rgb, t float64) rgb {
-	if t <= 0 {
-		return stops[0]
-	}
-	if t >= 1 {
-		return stops[len(stops)-1]
-	}
-	segment := t * float64(len(stops)-1)
-	i := int(segment)
-	return lerp(stops[i], stops[i+1], segment-float64(i))
-}
-
 func Prompt() string {
-	return paintBold(colorCyan, "> ")
+	if !enabled {
+		return "> "
+	}
+	placeholder := "Enter a task..."
+	hint := "Ctrl+C to exit"
+	spaces := strings.Repeat(" ", 76-4-len(placeholder)-len(hint))
+	return "  " + paintBold(colorCyan, "> ") + paint(colorGray, placeholder) + spaces + paint(colorGray, hint) + "\x1b[5G"
+}
+
+func ClearPromptLine() {
+	if !enabled {
+		return
+	}
+	if waitForFirstKey() {
+		fmt.Print("\r\x1b[2K  " + paintBold(colorCyan, "> "))
+	}
 }
 
 func ToolCall(name, args string) string {
