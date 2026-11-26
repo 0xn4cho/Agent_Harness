@@ -184,14 +184,14 @@ func TestExternalFileTools(t *testing.T) {
 	if err := os.MkdirAll(sourceDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	source := filepath.Join(sourceDir, "Boletin 3.pdf")
+	source := filepath.Join(sourceDir, "sample.pdf")
 	if err := os.WriteFile(source, []byte("notes"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	ctx := context.Background()
 	listed, err := NewListDirectoryTool().Execute(ctx, map[string]any{"path": sourceDir})
-	if err != nil || !strings.Contains(listed, "Boletin 3.pdf") {
+	if err != nil || !strings.Contains(listed, "sample.pdf") {
 		t.Fatalf("list_directory = %q, %v", listed, err)
 	}
 	found, err := NewFindFilesTool().Execute(ctx, map[string]any{"path": root, "pattern": "*.pdf"})
@@ -199,7 +199,7 @@ func TestExternalFileTools(t *testing.T) {
 		t.Fatalf("find_files = %q, %v", found, err)
 	}
 
-	copyPath := filepath.Join(root, "vault", "Boletin 3.pdf")
+	copyPath := filepath.Join(root, "dest", "sample.pdf")
 	if _, err := NewCopyPathTool().Execute(ctx, map[string]any{"source": source, "destination": copyPath}); err != nil {
 		t.Fatalf("copy_path failed: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestExternalFileTools(t *testing.T) {
 		t.Fatal("copy_path allowed an overwrite")
 	}
 
-	moved := filepath.Join(root, "vault", "Movido.pdf")
+	moved := filepath.Join(root, "dest", "moved.pdf")
 	if _, err := NewMovePathTool().Execute(ctx, map[string]any{"source": source, "destination": moved}); err != nil {
 		t.Fatalf("move_path failed: %v", err)
 	}

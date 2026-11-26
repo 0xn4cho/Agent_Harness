@@ -52,11 +52,16 @@ var roleOrder = []string{"leader", "implementer", "reviewer"}
 var workspaceInstructionFiles = []string{
 	"SQUIB.md",
 	".squib/instructions.md",
-	"06_Sistema/Reglas-Squib.md",
 }
 
 func loadWorkspaceInstructions() (string, string) {
-	for _, relPath := range workspaceInstructionFiles {
+	candidates := make([]string, 0, len(workspaceInstructionFiles)+1)
+	if custom := strings.TrimSpace(os.Getenv("SQUIB_RULES_FILE")); custom != "" {
+		candidates = append(candidates, custom)
+	}
+	candidates = append(candidates, workspaceInstructionFiles...)
+
+	for _, relPath := range candidates {
 		safePath, err := security.ValidateSafePath(relPath)
 		if err != nil {
 			continue

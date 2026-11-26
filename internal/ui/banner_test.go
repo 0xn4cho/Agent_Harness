@@ -10,8 +10,8 @@ func TestRenderBannerWidePlainAndTokyoNight(t *testing.T) {
 	t.Cleanup(func() { enabled = previous })
 
 	info := StartupInfo{
-		Workspace: "~/MiVault",
-		RulesFile: "06_Sistema/Reglas-Squib.md",
+		Workspace: "~/project",
+		RulesFile: "SQUIB.md",
 		Models:    "20b / 120b",
 	}
 
@@ -19,8 +19,8 @@ func TestRenderBannerWidePlainAndTokyoNight(t *testing.T) {
 	plain := RenderBanner(80, info)
 	for _, want := range []string{
 		"███████╗",
-		"workspace ~/MiVault",
-		"reglas Reglas-Squib.md ✓",
+		"workspace ~/project",
+		"reglas SQUIB.md ✓",
 		"modelos 20b / 120b",
 		"/help · /roles · /compact · /clear · exit",
 		"────",
@@ -101,10 +101,10 @@ func TestSummarizeToolArgsAndToolResult(t *testing.T) {
 		args string
 		want string
 	}{
-		{"read_file", `{"path":"06_Sistema/Tareas pendientes.md"}`, "06_Sistema/Tareas pendientes.md"},
-		{"write_file", `{"path":"06_Sistema/Ideas rápidas.md","content":"nota"}`, "06_Sistema/Ideas rápidas.md"},
+		{"read_file", `{"path":"notes/tasks.md"}`, "notes/tasks.md"},
+		{"write_file", `{"path":"notes/ideas.md","content":"nota"}`, "notes/ideas.md"},
 		{"bash", `{"command":"git status"}`, "git status"},
-		{"find_files", `{"path":"C:\\Vault","pattern":"*.md"}`, `*.md in C:\Vault`},
+		{"find_files", `{"path":"C:\\Workspace","pattern":"*.md"}`, `*.md in C:\Workspace`},
 		{"copy_path", `{"source":"a.txt","destination":"b.txt"}`, "a.txt → b.txt"},
 		{"devops_status", `{"target":"docker"}`, "docker"},
 		{"custom", "raw \x1b[31minput", "raw input"},
@@ -115,9 +115,9 @@ func TestSummarizeToolArgsAndToolResult(t *testing.T) {
 		}
 	}
 
-	okLine := ToolResult("├─", "read_file", `{"path":"06_Sistema/Tareas pendientes.md"}`, true)
+	okLine := ToolResult("├─", "read_file", `{"path":"notes/tasks.md"}`, true)
 	if !strings.Contains(okLine, "├─") || !strings.Contains(okLine, "read_file") ||
-		!strings.Contains(okLine, "06_Sistema/Tareas pendientes.md") || !strings.Contains(okLine, "✓") {
+		!strings.Contains(okLine, "notes/tasks.md") || !strings.Contains(okLine, "✓") {
 		t.Errorf("unexpected ToolResult(ok): %q", okLine)
 	}
 	failLine := ToolResult("└─", "bash", `{"command":"git status"}`, false)

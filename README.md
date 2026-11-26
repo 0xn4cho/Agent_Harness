@@ -7,7 +7,7 @@ Agente multiagente de código, notas y DevOps para terminal, escrito en Go y pen
 ## Qué puede hacer
 
 - Orquestar turnos entre **tres roles especializados** (`leader`, `implementer`, `reviewer`) definidos en `agents/*.md`, cada uno con su propio modelo, límite de salida, esfuerzo de razonamiento y herramientas permitidas.
-- Autocargar instrucciones del workspace (`SQUIB.md`, `.squib/instructions.md` o `06_Sistema/Reglas-Squib.md`) para respetar tus carpetas y rutas sin tener que repetirlas.
+- Autocargar instrucciones del workspace (`SQUIB.md`, `.squib/instructions.md` o la ruta relativa indicada en `SQUIB_RULES_FILE`) para respetar tus carpetas y rutas sin tener que repetirlas.
 - Responder **directamente** (`DIRECT_ANSWER`) en consultas de solo lectura (por ejemplo, listar tareas pendientes o leer notas) sin disparar los roles de implementación ni revisión.
 - Leer y escribir archivos dentro del workspace, y listar, buscar, copiar o mover rutas externas de forma segura con confirmación reforzada.
 - Ejecutar comandos de PowerShell clasificados por nivel de riesgo (`low`, `high`, `blocked`) y consultar contenedores Docker o pods de Kubernetes.
@@ -79,7 +79,7 @@ Para respetar los límites de tokens por minuto de Groq, SquibCode conserva como
 
 ### Agentes, reglas del workspace, informes y comandos
 
-1. Si el workspace actual contiene `SQUIB.md`, `.squib/instructions.md` o `06_Sistema/Reglas-Squib.md`, SquibCode lo carga automáticamente en el prompt del sistema junto a la fecha local actual.
+1. Si el workspace actual contiene `SQUIB.md`, `.squib/instructions.md` o una ruta relativa válida dentro del workspace definida en `SQUIB_RULES_FILE`, SquibCode lo carga automáticamente en el prompt del sistema junto a la fecha local actual.
 2. En consultas de solo lectura, `leader` lee los archivos reales y responde directamente (`DIRECT_ANSWER`) sin pasar por `implementer` ni `reviewer`.
 3. En tareas de edición, creación o ejecución de comandos, el flujo avanza por `leader` → `implementer` → `reviewer`, guardando informes acotados en `progress/` (`leader.md`, `implementer.md`, `reviewer.md`). Si `reviewer` responde `CHANGES_REQUESTED`, el orquestador ejecuta automáticamente 1 ronda de corrección con `implementer` y vuelve a revisar.
 

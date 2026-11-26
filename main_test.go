@@ -340,6 +340,7 @@ func TestLoadWorkspaceInstructionsAndBuildSystemPrompt(t *testing.T) {
 		_ = os.Chdir(origCwd)
 	})
 
+	t.Setenv("SQUIB_RULES_FILE", "")
 	now := time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC)
 
 	rulesPath, rulesContent := loadWorkspaceInstructions()
@@ -351,22 +352,22 @@ func TestLoadWorkspaceInstructionsAndBuildSystemPrompt(t *testing.T) {
 		t.Errorf("expected base prompt to contain current local date, got:\n%s", basePrompt)
 	}
 
-	reglasPath := filepath.Join(tmp, "06_Sistema", "Reglas-Squib.md")
+	reglasPath := filepath.Join(tmp, ".squib", "instructions.md")
 	if err := os.MkdirAll(filepath.Dir(reglasPath), 0755); err != nil {
-		t.Fatalf("failed to create 06_Sistema: %v", err)
+		t.Fatalf("failed to create .squib: %v", err)
 	}
-	if err := os.WriteFile(reglasPath, []byte("Bloc: 06_Sistema/Tareas pendientes.md"), 0644); err != nil {
-		t.Fatalf("failed to write Reglas-Squib.md: %v", err)
+	if err := os.WriteFile(reglasPath, []byte("Tasks file: notes/tasks.md"), 0644); err != nil {
+		t.Fatalf("failed to write instructions.md: %v", err)
 	}
 
 	rulesPath, rulesContent = loadWorkspaceInstructions()
-	if rulesPath != "06_Sistema/Reglas-Squib.md" {
-		t.Fatalf("loadWorkspaceInstructions() path = %q, want %q", rulesPath, "06_Sistema/Reglas-Squib.md")
+	if rulesPath != ".squib/instructions.md" {
+		t.Fatalf("loadWorkspaceInstructions() path = %q, want %q", rulesPath, ".squib/instructions.md")
 	}
 	vaultPrompt := buildSystemPrompt(now, rulesPath, rulesContent)
-	if !strings.Contains(vaultPrompt, "auto-loaded from 06_Sistema/Reglas-Squib.md") ||
-		!strings.Contains(vaultPrompt, "Bloc: 06_Sistema/Tareas pendientes.md") {
-		t.Errorf("expected vault prompt to include rules path and content, got:\n%s", vaultPrompt)
+	if !strings.Contains(vaultPrompt, "auto-loaded from .squib/instructions.md") ||
+		!strings.Contains(vaultPrompt, "Tasks file: notes/tasks.md") {
+		t.Errorf("expected prompt to include rules path and content, got:\n%s", vaultPrompt)
 	}
 
 	squibMD := filepath.Join(tmp, "SQUIB.md")
@@ -377,6 +378,25 @@ func TestLoadWorkspaceInstructionsAndBuildSystemPrompt(t *testing.T) {
 	if rulesPath != "SQUIB.md" || rulesContent != "Custom SQUIB.md override" {
 		t.Fatalf("expected SQUIB.md to take priority, got (%q, %q)", rulesPath, rulesContent)
 	}
+
+	customRules := filepath.Join(tmp, "docs", "custom-rules.md")
+	if err := os.MkdirAll(filepath.Dir(customRules), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(customRules, []byte("Custom env rules"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SQUIB_RULES_FILE", "docs/custom-rules.md")
+	rulesPath, rulesContent = loadWorkspaceInstructions()
+	if rulesPath != "docs/custom-rules.md" || rulesContent != "Custom env rules" {
+		t.Fatalf("expected SQUIB_RULES_FILE to take priority, got (%q, %q)", rulesPath, rulesContent)
+	}
+
+	t.Setenv("SQUIB_RULES_FILE", "../outside-secret.md")
+	rulesPath, rulesContent = loadWorkspaceInstructions()
+	if rulesPath != "SQUIB.md" || rulesContent != "Custom SQUIB.md override" {
+		t.Fatalf("expected outside SQUIB_RULES_FILE to be rejected and fall back to SQUIB.md, got (%q, %q)", rulesPath, rulesContent)
+	}
 }
 
 func TestRunMultiAgentTurnDirectAnswerSkipsImplementerAndReviewer(t *testing.T) {
@@ -385,14 +405,14 @@ func TestRunMultiAgentTurnDirectAnswerSkipsImplementerAndReviewer(t *testing.T) 
 	gate := permission.NewGate(bufio.NewScanner(strings.NewReader("")))
 	progressDir := filepath.Join(t.TempDir(), "progress")
 
-	if got := stripDirectAnswer("Tareas:\n- Revisar PR\n**DIRECT_ANSWER**"); got != "Tareas:\n- Revisar PR" {
+	if got := stripDirectAnswer("Tasks:\n- Review PR\n**DIRECT_ANSWER**"); got != "Tasks:\n- Review PR" {
 		t.Fatalf("stripDirectAnswer did not remove wrapped marker: %q", got)
 	}
 
 	var called []string
 	leaderMock := provider.NewMock(api.Message{
 		Role:    "assistant",
-		Content: "Tareas pendientes:\n- Terminar informe\n**DIRECT_ANSWER**",
+		Content: "Pending tasks:\n- Finish report\n**DIRECT_ANSWER**",
 	})
 	newProvider := func(r agents.Role) provider.Provider {
 		called = append(called, r.Name)
@@ -403,17 +423,17 @@ func TestRunMultiAgentTurnDirectAnswerSkipsImplementerAndReviewer(t *testing.T) 
 		return nil
 	}
 
-	summary, err := runMultiAgentTurn(context.Background(), "SYS\n---\nReglas\n---", "Dime que tareas tengo pendientes", "", progressDir, roles, newProvider, reg, gate)
+	summary, err := runMultiAgentTurn(context.Background(), "SYS\n---\nRules\n---", "List my pending tasks", "", progressDir, roles, newProvider, reg, gate)
 	if err != nil {
 		t.Fatalf("runMultiAgentTurn failed: %v", err)
 	}
 	if strings.Join(called, ",") != "leader" {
 		t.Errorf("called roles = %v, want only leader", called)
 	}
-	if !strings.Contains(summary, "Terminar informe") || strings.Contains(summary, "DIRECT_ANSWER") {
+	if !strings.Contains(summary, "Finish report") || strings.Contains(summary, "DIRECT_ANSWER") {
 		t.Errorf("unexpected summary: %q", summary)
 	}
-	if !strings.Contains(leaderMock.Calls[0].Messages[0].Content, "Reglas") {
+	if !strings.Contains(leaderMock.Calls[0].Messages[0].Content, "Rules") {
 		t.Errorf("expected leader system prompt to include workspace rules")
 	}
 
@@ -452,11 +472,11 @@ func TestRunMultiAgentTurnRecoversFromLeaderToolUseFailed(t *testing.T) {
 		}
 		return &api.Message{
 			Role:    "assistant",
-			Content: "Plan: añadir la nota en Ideas rápidas.md usando write_file.",
+			Content: "Plan: add note to notes/ideas.md using write_file.",
 		}, nil
 	}
-	implMock := provider.NewMock(api.Message{Role: "assistant", Content: "Nota añadida en Ideas rápidas.md."})
-	revMock := provider.NewMock(api.Message{Role: "assistant", Content: "Cambio verificado.\nAPPROVED"})
+	implMock := provider.NewMock(api.Message{Role: "assistant", Content: "Added note to notes/ideas.md."})
+	revMock := provider.NewMock(api.Message{Role: "assistant", Content: "Verified change.\nAPPROVED"})
 
 	newProvider := func(r agents.Role) provider.Provider {
 		switch r.Name {
@@ -469,7 +489,7 @@ func TestRunMultiAgentTurnRecoversFromLeaderToolUseFailed(t *testing.T) {
 		}
 	}
 
-	summary, err := runMultiAgentTurn(context.Background(), systemPrompt, "Añádeme una nota en ideas rápidas", "", progressDir, roles, newProvider, reg, gate)
+	summary, err := runMultiAgentTurn(context.Background(), systemPrompt, "Add a note to notes/ideas.md", "", progressDir, roles, newProvider, reg, gate)
 	if err != nil {
 		t.Fatalf("expected recovery to succeed, got error: %v", err)
 	}

@@ -43,7 +43,7 @@ func (t *ExternalFileTool) Definition() api.ToolDef {
 	}
 	required := []string{"path"}
 	if t.name == "find_files" {
-		properties["pattern"] = map[string]any{"type": "string", "description": "Filename pattern such as *.pdf or *Boletin*."}
+		properties["pattern"] = map[string]any{"type": "string", "description": "Filename pattern such as *.md or *.pdf."}
 		required = append(required, "pattern")
 	}
 	if t.name == "copy_path" || t.name == "move_path" {
