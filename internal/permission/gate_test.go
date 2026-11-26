@@ -72,3 +72,28 @@ func TestGateRequiresConfirmationForReadOnlyTools(t *testing.T) {
 		t.Errorf("devops_status should NOT be auto-approved when user says 'n'")
 	}
 }
+
+func TestGateReinforcedApprovalForExternalFilesystemTools(t *testing.T) {
+	gateDenyY := NewGate(bufio.NewScanner(strings.NewReader("y\n")))
+	if gateDenyY.Ask("list_directory", `{"path": "C:\\Temp"}`) {
+		t.Errorf("expected single-letter 'y' to be rejected for list_directory")
+	}
+
+	gateDenyAlways := NewGate(bufio.NewScanner(strings.NewReader("always\n")))
+	if gateDenyAlways.Ask("move_path", `{"source":"a","destination":"b"}`) {
+		t.Errorf("expected 'always' not to approve external filesystem tool")
+	}
+	if gateDenyAlways.always["move_path"] {
+		t.Errorf("gate.always['move_path'] must remain false")
+	}
+
+	gateAllowYes := NewGate(bufio.NewScanner(strings.NewReader("yes\n")))
+	if !gateAllowYes.Ask("find_files", `{"path":"C:\\Temp","pattern":"*.md"}`) {
+		t.Errorf("expected full 'yes' to approve external filesystem tool")
+	}
+
+	gateAllowSi := NewGate(bufio.NewScanner(strings.NewReader("si\n")))
+	if !gateAllowSi.Ask("copy_path", `{"source":"a","destination":"b"}`) {
+		t.Errorf("expected full 'si' to approve external filesystem tool")
+	}
+}

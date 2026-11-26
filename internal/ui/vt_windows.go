@@ -6,23 +6,35 @@ import (
 	"unsafe"
 )
 
-type keyEventRecord struct {
-	bKeyDown          int32
-	wRepeatCount      uint16
-	wVirtualKeyCode   uint16
-	wVirtualScanCode  uint16
-	unicodeChar       uint16
-	dwControlKeyState uint32
+type coord struct {
+	x int16
+	y int16
 }
 
-type inputRecord struct {
-	eventType uint16
-	_         uint16
-	keyEvent  keyEventRecord
+type smallRect struct {
+	left   int16
+	top    int16
+	right  int16
+	bottom int16
+}
+
+type consoleScreenBufferInfo struct {
+	size              coord
+	cursorPosition    coord
+	attributes        uint16
+	window            smallRect
+	maximumWindowSize coord
 }
 
 func enableVirtualTerminal() bool {
-	const enableVirtualTerminalProcessing = 0x0004
+	const (
+		enableVirtualTerminalProcessing = 0x0004
+		utf8CodePage                    = 65001
+	)
+
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	_, _, _ = kernel32.NewProc("SetConsoleOutputCP").Call(uintptr(utf8CodePage))
+	_, _, _ = kernel32.NewProc("SetConsoleCP").Call(uintptr(utf8CodePage))
 
 	handle := syscall.Handle(os.Stdout.Fd())
 	var mode uint32
@@ -33,58 +45,22 @@ func enableVirtualTerminal() bool {
 		return true
 	}
 
-	setConsoleMode := syscall.NewLazyDLL("kernel32.dll").NewProc("SetConsoleMode")
+	setConsoleMode := kernel32.NewProc("SetConsoleMode")
 	ok, _, _ := setConsoleMode.Call(uintptr(handle), uintptr(mode|enableVirtualTerminalProcessing))
 	return ok != 0
 }
 
-func waitForFirstKey() bool {
-	const keyEventType = 0x0001
-
-	stdinHandle := syscall.Handle(os.Stdin.Fd())
-	var mode uint32
-	if err := syscall.GetConsoleMode(stdinHandle, &mode); err != nil {
-		return false
+func TermWidth() int {
+	handle := syscall.Handle(os.Stdout.Fd())
+	getConsoleScreenBufferInfo := syscall.NewLazyDLL("kernel32.dll").NewProc("GetConsoleScreenBufferInfo")
+	var info consoleScreenBufferInfo
+	ok, _, _ := getConsoleScreenBufferInfo.Call(uintptr(handle), uintptr(unsafe.Pointer(&info)))
+	if ok == 0 {
+		return 0
 	}
-
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	peekConsoleInputW := kernel32.NewProc("PeekConsoleInputW")
-	readConsoleInputW := kernel32.NewProc("ReadConsoleInputW")
-
-	for {
-		event, err := syscall.WaitForSingleObject(stdinHandle, syscall.INFINITE)
-		if err != nil || event != syscall.WAIT_OBJECT_0 {
-			return false
-		}
-
-		var rec inputRecord
-		var readCount uint32
-		ok, _, _ := peekConsoleInputW.Call(
-			uintptr(stdinHandle),
-			uintptr(unsafe.Pointer(&rec)),
-			1,
-			uintptr(unsafe.Pointer(&readCount)),
-		)
-		if ok == 0 {
-			return false
-		}
-		if readCount == 0 {
-			continue
-		}
-
-		if rec.eventType == keyEventType && rec.keyEvent.bKeyDown != 0 && rec.keyEvent.unicodeChar != 0 {
-			return true
-		}
-
-		var discarded uint32
-		ok, _, _ = readConsoleInputW.Call(
-			uintptr(stdinHandle),
-			uintptr(unsafe.Pointer(&rec)),
-			1,
-			uintptr(unsafe.Pointer(&discarded)),
-		)
-		if ok == 0 {
-			return false
-		}
+	w := int(info.window.right - info.window.left + 1)
+	if w < 0 {
+		return 0
 	}
+	return w
 }

@@ -27,7 +27,25 @@ func (g *Gate) Ask(toolName string, rawArgs string) bool {
 		return true
 	}
 
-	sanitizedArgs := security.SanitizeTerminal(strings.TrimSpace(rawArgs))
+	target := ui.SummarizeToolArgs(toolName, rawArgs)
+	if target == "" {
+		target = security.SanitizeTerminal(strings.TrimSpace(rawArgs))
+	}
+
+	if isExternalFilesystemTool(toolName) {
+		fmt.Println()
+		fmt.Printf("  %s %s %s %s %s %s\n", ui.Error("│"), ui.Error("Permiso externo"), ui.Dim("·"), ui.Cyan(toolName), ui.Dim("→"), ui.Text(target))
+		fmt.Printf("  %s %s %s ", ui.Error("│"), ui.Warn("¿Aprobar? [escribe 'yes' o 'si']"), ui.PromptGlyph())
+		if !g.scanner.Scan() {
+			return false
+		}
+		answer := strings.ToLower(strings.TrimSpace(g.scanner.Text()))
+		if answer == "yes" || answer == "si" {
+			return true
+		}
+		fmt.Printf("  %s %s\n", ui.Error("│"), ui.Error("Denegado (requiere 'yes' o 'si')"))
+		return false
+	}
 
 	if toolName == "bash" {
 		var parsed map[string]any
@@ -40,24 +58,23 @@ func (g *Gate) Ask(toolName string, rawArgs string) bool {
 
 		assessment := security.ClassifyCommand(cmdStr)
 		if assessment.Risk == security.RiskBlocked {
-			fmt.Println(ui.Error("\n🛑 [SECURITY GATE] Command blocked by security policy:"))
-			fmt.Printf("   Command:   %s\n", sanitizedArgs)
-			fmt.Printf("   Reason:    %s\n", strings.Join(assessment.Reasons, "; "))
+			fmt.Println()
+			fmt.Printf("  %s %s %s %s %s %s\n", ui.Error("│"), ui.Error("Bloqueado"), ui.Dim("·"), ui.Cyan(toolName), ui.Dim("→"), ui.Text(target))
+			fmt.Printf("  %s %s\n", ui.Error("│"), ui.Dim(strings.Join(assessment.Reasons, "; ")))
 			return false
 		}
 
 		if assessment.Risk == security.RiskHigh {
-			fmt.Println(ui.Error("\n🚨 [REINFORCED SHELL APPROVAL] Full shell access requested:"))
-			fmt.Printf("   Tool:      %s (elevated risk — outside inspection allowlist)\n", ui.Accent(toolName))
-			fmt.Printf("   Arguments: %s\n", sanitizedArgs)
+			fmt.Println()
+			fmt.Printf("  %s %s %s %s %s %s\n", ui.Error("│"), ui.Error("Permiso reforzado"), ui.Dim("·"), ui.Cyan(toolName), ui.Dim("→"), ui.Text(target))
 			for _, r := range assessment.Reasons {
-				fmt.Printf("   • Risk:    %s\n", ui.Warn(r))
+				fmt.Printf("  %s %s\n", ui.Error("│"), ui.Dim("Riesgo: "+r))
 			}
-			fmt.Print(ui.Warn("   Type 'yes' (or 'si') in full to approve full-shell execution [yes/no]: "))
+			fmt.Printf("  %s %s %s ", ui.Error("│"), ui.Warn("¿Aprobar? [escribe 'yes' o 'si']"), ui.PromptGlyph())
 
 			if !g.scanner.Scan() {
 				if err := g.scanner.Err(); err != nil {
-					fmt.Println(ui.Error(fmt.Sprintf("   ❌ Input error: %v", err)))
+					fmt.Printf("  %s %s\n", ui.Error("│"), ui.Error(fmt.Sprintf("Error de entrada: %v", err)))
 				}
 				return false
 			}
@@ -65,24 +82,22 @@ func (g *Gate) Ask(toolName string, rawArgs string) bool {
 			if answer == "yes" || answer == "si" {
 				return true
 			}
-			fmt.Println(ui.Error("   ❌ Reinforced approval denied (must type 'yes' or 'si' in full for non-allowlisted shell commands)."))
+			fmt.Printf("  %s %s\n", ui.Error("│"), ui.Error("Denegado (requiere 'yes' o 'si')"))
 			return false
 		}
 
-		fmt.Println(ui.Warn("\n⚠️  [PERMISSION GATE] Allowlisted low-risk inspection command:"))
-		fmt.Printf("   Tool:      %s (low-risk inspection)\n", ui.Accent(toolName))
-		fmt.Printf("   Arguments: %s\n", sanitizedArgs)
-		fmt.Print(ui.Warn("   Allow execution? [y=Yes / n=No]: "))
+		fmt.Println()
+		fmt.Printf("  %s %s %s %s %s %s\n", ui.Warn("│"), ui.Warn("Permiso"), ui.Dim("·"), ui.Cyan(toolName), ui.Dim("→"), ui.Text(target))
+		fmt.Printf("  %s %s %s ", ui.Warn("│"), ui.Dim("¿Aprobar? [y/n]"), ui.PromptGlyph())
 	} else {
-		fmt.Println(ui.Warn("\n⚠️  [PERMISSION GATE] The agent wants to execute:"))
-		fmt.Printf("   Tool:      %s\n", ui.Accent(toolName))
-		fmt.Printf("   Arguments: %s\n", sanitizedArgs)
-		fmt.Print(ui.Warn("   Allow execution? [y=Yes / n=No / a=Always allow this tool]: "))
+		fmt.Println()
+		fmt.Printf("  %s %s %s %s %s %s\n", ui.Warn("│"), ui.Warn("Permiso"), ui.Dim("·"), ui.Cyan(toolName), ui.Dim("→"), ui.Text(target))
+		fmt.Printf("  %s %s %s ", ui.Warn("│"), ui.Dim("¿Aprobar? [y/n/a]"), ui.PromptGlyph())
 	}
 
 	if !g.scanner.Scan() {
 		if err := g.scanner.Err(); err != nil {
-			fmt.Println(ui.Error(fmt.Sprintf("   ❌ Input error: %v", err)))
+			fmt.Printf("  %s %s\n", ui.Error("│"), ui.Error(fmt.Sprintf("Error de entrada: %v", err)))
 		}
 		return false
 	}
@@ -92,16 +107,24 @@ func (g *Gate) Ask(toolName string, rawArgs string) bool {
 	case "y", "yes", "si", "s":
 		return true
 	case "a", "always":
-		if toolName == "bash" || toolName == "write_file" || toolName == "devops_status" {
-			fmt.Println(ui.Warn("   ⚠️ Shell commands, file writes, and DevOps status checks require per-operation confirmation for strict isolation."))
-			fmt.Println(ui.Dim("   (Approving this execution once)"))
+		if toolName == "bash" || toolName == "write_file" || toolName == "devops_status" || isExternalFilesystemTool(toolName) {
+			fmt.Printf("  %s %s\n", ui.Warn("│"), ui.Dim("Aprobado solo para esta operación"))
 			return true
 		}
 		g.always[toolName] = true
-		fmt.Printf("   (Tool %q will be allowed automatically for the rest of this session)\n", toolName)
+		fmt.Printf("  %s %s\n", ui.Success("│"), ui.Dim(fmt.Sprintf("Permitido %q durante esta sesión", toolName)))
 		return true
 	default:
-		fmt.Println(ui.Error("   ❌ Execution denied by user."))
+		fmt.Printf("  %s %s\n", ui.Error("│"), ui.Error("Denegado"))
+		return false
+	}
+}
+
+func isExternalFilesystemTool(toolName string) bool {
+	switch toolName {
+	case "list_directory", "find_files", "copy_path", "move_path":
+		return true
+	default:
 		return false
 	}
 }
