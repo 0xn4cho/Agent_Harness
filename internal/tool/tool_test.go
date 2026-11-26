@@ -158,8 +158,12 @@ func TestRegistryDefinitionsDeterministicOrder(t *testing.T) {
 	reg.Register(NewBashTool())
 	reg.Register(NewDevOpsTool())
 	reg.Register(NewReadFileTool())
+	reg.Register(NewListDirectoryTool())
+	reg.Register(NewFindFilesTool())
+	reg.Register(NewCopyPathTool())
+	reg.Register(NewMovePathTool())
 
-	want := []string{"bash", "devops_status", "read_file", "write_file"}
+	want := []string{"bash", "copy_path", "devops_status", "find_files", "list_directory", "move_path", "read_file", "write_file"}
 
 	for iter := 0; iter < 20; iter++ {
 		defs := reg.Definitions()
@@ -171,5 +175,52 @@ func TestRegistryDefinitionsDeterministicOrder(t *testing.T) {
 				t.Fatalf("iteration %d: defs[%d].Name = %q, want %q", iter, i, d.Name, want[i])
 			}
 		}
+	}
+}
+
+func TestExternalFileTools(t *testing.T) {
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source")
+	if err := os.MkdirAll(sourceDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(sourceDir, "sample.pdf")
+	if err := os.WriteFile(source, []byte("notes"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	listed, err := NewListDirectoryTool().Execute(ctx, map[string]any{"path": sourceDir})
+	if err != nil || !strings.Contains(listed, "sample.pdf") {
+		t.Fatalf("list_directory = %q, %v", listed, err)
+	}
+	found, err := NewFindFilesTool().Execute(ctx, map[string]any{"path": root, "pattern": "*.pdf"})
+	if err != nil || !strings.Contains(found, source) {
+		t.Fatalf("find_files = %q, %v", found, err)
+	}
+
+	copyPath := filepath.Join(root, "dest", "sample.pdf")
+	if _, err := NewCopyPathTool().Execute(ctx, map[string]any{"source": source, "destination": copyPath}); err != nil {
+		t.Fatalf("copy_path failed: %v", err)
+	}
+	if _, err := os.Stat(source); err != nil {
+		t.Fatalf("copy_path removed source: %v", err)
+	}
+	if data, err := os.ReadFile(copyPath); err != nil || string(data) != "notes" {
+		t.Fatalf("copied content = %q, %v", data, err)
+	}
+	if _, err := NewCopyPathTool().Execute(ctx, map[string]any{"source": source, "destination": copyPath}); err == nil {
+		t.Fatal("copy_path allowed an overwrite")
+	}
+
+	moved := filepath.Join(root, "dest", "moved.pdf")
+	if _, err := NewMovePathTool().Execute(ctx, map[string]any{"source": source, "destination": moved}); err != nil {
+		t.Fatalf("move_path failed: %v", err)
+	}
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("move_path left source in place: %v", err)
+	}
+	if _, err := os.Stat(moved); err != nil {
+		t.Fatalf("move_path did not create destination: %v", err)
 	}
 }
