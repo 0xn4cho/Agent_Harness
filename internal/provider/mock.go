@@ -121,10 +121,11 @@ func (m *MockProvider) interactiveFallback(messages []api.Message, callNum int) 
 		}
 	}
 
-	lower := strings.ToLower(strings.TrimSpace(last.Content))
+	userInput := extractUserInput(last.Content)
+	lower := strings.ToLower(strings.TrimSpace(userInput))
 	switch {
 	case strings.HasPrefix(lower, "read "):
-		path := strings.TrimSpace(last.Content[5:])
+		path := strings.TrimSpace(userInput[5:])
 		args, _ := json.Marshal(map[string]string{"path": path})
 		return &api.Message{
 			Role: "assistant",
@@ -137,7 +138,7 @@ func (m *MockProvider) interactiveFallback(messages []api.Message, callNum int) 
 			},
 		}
 	case strings.HasPrefix(lower, "run ") || strings.HasPrefix(lower, "bash "):
-		parts := strings.SplitN(last.Content, " ", 2)
+		parts := strings.SplitN(strings.TrimSpace(userInput), " ", 2)
 		cmd := ""
 		if len(parts) == 2 {
 			cmd = strings.TrimSpace(parts[1])
@@ -174,7 +175,19 @@ func (m *MockProvider) interactiveFallback(messages []api.Message, callNum int) 
 	default:
 		return &api.Message{
 			Role:    "assistant",
-			Content: fmt.Sprintf("[mock] Received: %q (tip: try 'read main.go', 'run git status', or 'devops')", last.Content),
+			Content: fmt.Sprintf("[mock] Received: %q (tip: try 'read main.go' or 'run git status')", userInput),
 		}
 	}
+}
+
+func extractUserInput(content string) string {
+	const marker = "Solicitud del usuario:\n"
+	if idx := strings.Index(content, marker); idx >= 0 {
+		rest := content[idx+len(marker):]
+		if end := strings.Index(rest, "\n\n"); end >= 0 {
+			return rest[:end]
+		}
+		return rest
+	}
+	return content
 }

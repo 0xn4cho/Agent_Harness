@@ -1,23 +1,32 @@
-# Squib 🐙
+# SquibCode 🐙
 
-Agente de código y DevOps para terminal, escrito en Go y pensado para Windows. Squib se conecta a Groq para interpretar tus peticiones y, con tu autorización, puede inspeccionar código, crear o modificar archivos dentro del proyecto, ejecutar comandos de PowerShell y consultar el estado de Docker o Kubernetes.
+Agente multiagente de código, notas y DevOps para terminal, escrito en Go y pensado para Windows. SquibCode se conecta a Groq para interpretar tus peticiones y, con tu autorización, puede inspeccionar código, leer o editar archivos, buscar y mover ficheros, ejecutar comandos de PowerShell y consultar el estado de Docker o Kubernetes.
 
-> Squib es un agente con acceso a herramientas locales. Revisa siempre la operación y el diff antes de aprobar una escritura o un comando.
+> SquibCode tiene acceso a herramientas locales. Revisa siempre la operación y los argumentos antes de aprobar una escritura, movimiento o comando.
 
 ## Qué puede hacer
 
-- Leer archivos del workspace para entender el proyecto.
-- Crear y actualizar archivos de código, configuración o documentación.
-- Ejecutar comandos de PowerShell para compilar, formatear, ejecutar tests o consultar Git.
-- Consultar contenedores Docker y pods de Kubernetes.
-- Trabajar con Groq o en modo local simulado (`--mock`), útil para probar el flujo sin consumir API.
+- Orquestar turnos entre **tres roles especializados** (`leader`, `implementer`, `reviewer`) definidos en `agents/*.md`, cada uno con su propio modelo, límite de salida, esfuerzo de razonamiento y herramientas permitidas.
+- Autocargar instrucciones del workspace (`SQUIB.md`, `.squib/instructions.md` o `06_Sistema/Reglas-Squib.md`) para respetar tus carpetas y rutas sin tener que repetirlas.
+- Responder **directamente** (`DIRECT_ANSWER`) en consultas de solo lectura (por ejemplo, listar tareas pendientes o leer notas) sin disparar los roles de implementación ni revisión.
+- Leer y escribir archivos dentro del workspace, y listar, buscar, copiar o mover rutas externas de forma segura con confirmación reforzada.
+- Ejecutar comandos de PowerShell clasificados por nivel de riesgo (`low`, `high`, `blocked`) y consultar contenedores Docker o pods de Kubernetes.
+- Trabajar con Groq o en modo local simulado (`--mock`), útil para probar la interfaz y el flujo sin consumir API.
+
+## Interfaz Tokyo Night
+
+- **Banner adaptativo `SQUIBCODE`:** fuente *ANSI Shadow* con degradado TrueColor azul → cian, sombra pizarra y destello metálico diagonal al abrir en terminales interactivas anchas, con fallback compacto en terminales estrechas o salida redirigida.
+- **Cabecera de estado compacta:** muestra en dos líneas el workspace actual, si se cargaron reglas `.md` (`✓`), los modelos activos y los comandos rápidos.
+- **Prompt y mensajería limpia:** prompt `❯` en violeta, cabeceras de rol diferenciadas por color (`● leader`, `● implementer`, `● reviewer`), spinner Braille contextual mientras trabaja y árboles discretos de herramientas (`├─` / `└─` con `✓` / `✗` sin JSON crudo).
+- **Puerta de permisos en barra lateral:** formato compacto `│ Permiso · <tool> → <destino>` diferenciado por nivel de riesgo.
+- **Terminal Windows nativa:** activa automáticamente UTF-8 (`65001`) y procesamiento VT al arrancar, y sale con código `0` en `exit`, `quit` y `Ctrl+C`.
 
 ## Requisitos
 
-- Windows con PowerShell.
+- Windows con PowerShell o Windows Terminal.
 - [Go 1.27.3](https://go.dev/dl/) o una versión compatible.
-- Una cuenta y una API key de [Groq](https://console.groq.com/keys) para usar el modelo real.
-- Opcional: Docker CLI y/o `kubectl` si vas a usar las consultas DevOps.
+- Una cuenta y API key de [Groq](https://console.groq.com/keys) para el modo real.
+- Opcional: Docker CLI y/o `kubectl` para las consultas DevOps.
 
 ## Inicio rápido
 
@@ -30,159 +39,149 @@ cd Agent_Harness
 
 ### 2. Configura la clave de Groq
 
-Para usarla solo en la ventana actual de PowerShell:
+Para usarla solo en la sesión actual de PowerShell:
 
 ```powershell
 $env:GROQ_API_KEY = "gsk_tu_clave_aqui"
 ```
 
-Para guardarla para tu usuario de Windows:
+Para guardarla de forma permanente en tu usuario de Windows (necesario si lanzas `squib.exe` desde un acceso directo o perfil de Windows Terminal):
 
 ```powershell
 [System.Environment]::SetEnvironmentVariable("GROQ_API_KEY", "gsk_tu_clave_aqui", "User")
 ```
 
-Cierra y abre una nueva terminal después de usar la configuración permanente. No subas nunca esa clave a Git ni la guardes en archivos `.env` que vayan a compartirse.
+Cierra y abre una nueva terminal después de configurarla. No subas nunca esa clave a Git ni la guardes en archivos `.env` compartidos.
 
-### 3. Ejecuta Squib
+### 3. Ejecuta SquibCode
 
 ```powershell
 go run .
 ```
 
-El modelo predeterminado es `openai/gpt-oss-120b`. Para seleccionar otro modelo disponible en Groq:
+Cada rol definido en `agents/` (`leader.md`, `implementer.md`, `reviewer.md`) configura su propio modelo y presupuesto:
+
+| Rol | Modelo por defecto | `max_completion_tokens` | Herramientas |
+|---|---|---|---|
+| `leader` | `openai/gpt-oss-20b` | `600` | `read_file`, `list_directory`, `find_files` |
+| `implementer` | `openai/gpt-oss-120b` | `1024` | `bash`, `copy_path`, `devops_status`, `find_files`, `list_directory`, `move_path`, `read_file`, `write_file` |
+| `reviewer` | `openai/gpt-oss-20b` | `600` | `bash`, `devops_status`, `find_files`, `list_directory`, `read_file` |
+
+Si necesitas forzar un único modelo global o ajustar el tope de salida de todos los roles:
 
 ```powershell
 $env:GROQ_MODEL = "<nombre-del-modelo>"
+$env:SQUIB_MAX_COMPLETION_TOKENS = "2048"
 go run .
 ```
 
-### 4. Habla con el agente
+Para respetar los límites de tokens por minuto de Groq, SquibCode conserva como máximo 4500 tokens de historial, limpia bloques `<think>` antes de traspasar informes, reintenta automáticamente respuestas `429` respetando `Retry-After` y recupera en modo texto si un modelo restringido intenta llamar a una herramienta fuera de su rol (`tool_use_failed`).
 
-Al aparecer el prompt, escribe una petición en lenguaje natural. Por ejemplo:
+### Agentes, reglas del workspace, informes y comandos
 
-```text
-Revisa main.go y explícame cómo funciona el bucle del agente.
-```
+1. Si el workspace actual contiene `SQUIB.md`, `.squib/instructions.md` o `06_Sistema/Reglas-Squib.md`, SquibCode lo carga automáticamente en el prompt del sistema junto a la fecha local actual.
+2. En consultas de solo lectura, `leader` lee los archivos reales y responde directamente (`DIRECT_ANSWER`) sin pasar por `implementer` ni `reviewer`.
+3. En tareas de edición, creación o ejecución de comandos, el flujo avanza por `leader` → `implementer` → `reviewer`, guardando informes acotados en `progress/` (`leader.md`, `implementer.md`, `reviewer.md`). Si `reviewer` responde `CHANGES_REQUESTED`, el orquestador ejecuta automáticamente 1 ronda de corrección con `implementer` y vuelve a revisar.
 
-```text
-Crea un archivo hello.py con una función que salude y sus tests con pytest.
-```
+Comandos disponibles en el prompt `❯`:
 
-```text
-Ejecuta los tests de Go y explícame cualquier fallo.
-```
+- `/help` · Muestra los comandos disponibles.
+- `/roles` · Muestra los roles, modelos y herramientas activas.
+- `/compact` · Resume y compacta el historial de sesión.
+- `/clear` · Limpia el historial de sesión.
+- `exit` / `quit` (o `Ctrl+C`) · Cierra SquibCode limpiamente con código `0`.
 
-Para salir, escribe `exit` o `quit`.
+## Ejecutable y perfil en Windows Terminal
 
-## Ejecutable opcional
-
-El repositorio no incluye binarios: compila tu propio ejecutable para no depender de `go run`:
+El repositorio ignora los binarios compilados (`*.exe` en `.gitignore`). Compila tu propio ejecutable en la raíz del proyecto:
 
 ```powershell
 go build -o squib.exe .
 .\squib.exe
 ```
 
+Si creas un perfil exclusivo en **Windows Terminal** (con tema Tokyo Night `#1A1B26`, fuente `Cascadia Mono` y fondo personalizado opcional), apunta `commandline` directamente a `squib.exe` (sin `powershell.exe -NoExit`) y `startingDirectory` a la carpeta de tu workspace o vault para que la ventana se cierre automáticamente al escribir `quit`, `exit` o pulsar `Ctrl+C`:
+
+```json
+{
+  "name": "SquibCode",
+  "commandline": "C:\\ruta\\a\\Squib\\squib.exe",
+  "startingDirectory": "C:\\ruta\\a\\tu\\workspace",
+  "background": "#1A1B26",
+  "foreground": "#C0CAF5",
+  "cursorColor": "#BB9AF7"
+}
+```
+
 ## Modo local de prueba
 
-El modo mock permite comprobar la interfaz y el flujo del agente sin API key ni llamadas de red:
+El modo mock permite comprobar la interfaz y el flujo sin API key ni llamadas de red:
 
 ```powershell
 go run . --mock
 ```
 
-También se puede activar con una variable de entorno:
+También puedes activarlo con una variable de entorno:
 
 ```powershell
 $env:SQUIB_PROVIDER = "mock"
 go run .
 ```
 
-## Cómo funciona
-
-1. Escribes una petición en la terminal.
-2. Squib la envía, junto con el contexto de conversación y las herramientas disponibles, al modelo de Groq.
-3. El modelo puede responder directamente o solicitar una herramienta, por ejemplo `read_file`, `write_file`, `bash` o `devops_status`.
-4. Squib muestra la herramienta y sus argumentos; debes aprobar o denegar la acción antes de ejecutarla.
-5. El resultado vuelve al modelo, que puede continuar trabajando o darte la respuesta final.
-
-El agente tiene un máximo de rondas por turno, un timeout global de cinco minutos y una ventana de contexto acotada por mensajes y tokens para evitar bucles, consumo de memoria y costes descontrolados.
-
 ## Herramientas disponibles
 
 | Herramienta | Uso |
 |---|---|
-| `read_file` | Lee un archivo del workspace. |
-| `write_file` | Crea o reemplaza un archivo del workspace. |
+| `read_file` | Lee un archivo dentro del workspace. |
+| `write_file` | Crea o reemplaza un archivo dentro del workspace. |
 | `bash` | Ejecuta un comando de PowerShell desde el workspace. |
 | `devops_status` | Muestra el estado de Docker, Kubernetes o ambos. |
+| `list_directory` | Lista el contenido de un directorio seleccionado (incluso fuera del workspace). |
+| `find_files` | Busca archivos recursivamente por patrón (por ejemplo `*.md` o `*.pdf`). |
+| `copy_path` | Copia un archivo o directorio sin sobrescribir destinos existentes. |
+| `move_path` | Mueve o reubica un archivo o directorio sin sobrescribir destinos existentes. |
 
-> **Alcance DevOps:** `devops_status` es de solo lectura: ejecuta únicamente `docker ps` y `kubectl get pods -A`. No valida ni despliega nada por sí misma. Para crear Dockerfiles, `docker-compose.yml` o manifiestos de Kubernetes, el agente usa `write_file`, así que el contenido lo genera el modelo y puede contener errores. Valida siempre el resultado antes de usarlo, por ejemplo con `docker compose config` o `kubectl apply --dry-run=client -f <fichero>`. Cualquier comando de validación o despliegue pasa por `bash` y requiere tu aprobación.
-
-Ejemplos de peticiones:
-
-```text
-Lee internal/tool/bash.go y busca posibles problemas de seguridad.
-```
-
-```text
-Crea una función en Go para validar un correo y añade tests de tabla.
-```
-
-```text
-Consulta el estado de Docker y resume los contenedores activos.
-```
+> **Alcance DevOps:** `devops_status` es de solo lectura: ejecuta únicamente `docker ps` y `kubectl get pods -A`. No valida ni despliega nada por sí misma. Valida siempre manifiestos generados antes de aplicarlos (`docker compose config`, `kubectl apply --dry-run=client -f <fichero>`).
 
 ## Seguridad y permisos
 
-Squib aplica varias protecciones antes de ejecutar herramientas:
-
-- Todas las herramientas solicitan confirmación explícita.
-- Los comandos de shell de riesgo requieren escribir `yes` completo; las acciones sensibles no se pueden aprobar permanentemente.
-- La lectura y escritura de archivos se limita al workspace y bloquea rutas habituales de credenciales, como `.ssh`, `.aws`, `.kube` y `.env`.
-- Las claves y tokens conocidos se eliminan del entorno de los procesos secundarios.
-- Las salidas de comandos, archivos y respuestas HTTP tienen límites de tamaño; el historial se compacta para controlar el contexto.
-
-Estas medidas no sustituyen el criterio humano: aprobar un comando permite que se ejecute con los permisos de tu usuario de Windows.
+- Todas las herramientas solicitan confirmación explícita; los comandos de shell no permitidos en lectura y las operaciones externas requieren escribir `yes` o `si` completo y nunca permiten aprobación permanente (`always`).
+- Las rutas de lectura/escritura en el workspace bloquean escapes por traversal, symlinks/junctions y ficheros sensibles (`.ssh`, `.aws`, `.kube`, `.env*`, etc.); las rutas externas también bloquean ubicaciones de credenciales y sobrescrituras.
+- Las claves y tokens conocidos se eliminan del entorno de procesos secundarios (`bash` / `devops_status`).
+- Las salidas de comandos, archivos y respuestas HTTP tienen límites de tamaño y timeout por turno de 5 minutos.
 
 ## Kubernetes opcional
 
-Por defecto, Squib no usa automáticamente el kubeconfig global. Si necesitas consultar un clúster, indica de forma explícita un kubeconfig permitido:
+Por defecto, SquibCode no usa automáticamente el kubeconfig global. Si necesitas consultar un clúster, indica un kubeconfig explícito:
 
 ```powershell
 $env:SQUIB_KUBECONFIG = "C:\ruta\al\kubeconfig"
 go run .
 ```
 
-No compartas ni subas ese fichero: puede contener credenciales del clúster.
-
 ## Desarrollo
 
-Ejecuta la suite de pruebas:
+Ejecuta la suite de pruebas y el análisis estático:
 
 ```powershell
 go test ./...
-```
-
-Comprueba problemas estáticos:
-
-```powershell
 go vet ./...
 ```
 
-La estructura principal del proyecto es:
+Estructura principal del proyecto:
 
 ```text
 .
-├── main.go                 # REPL y bucle principal del agente
+├── main.go                 # REPL, comandos slash, reglas de workspace y orquestador
+├── agents/                 # Definiciones Markdown de leader, implementer y reviewer
+├── progress/               # Informes de traspaso en tiempo de ejecución (ignorado en Git)
 └── internal/
+    ├── agents/             # Carga de roles (.md) e informes en progress/
     ├── api/                # Tipos compartidos de mensajes y herramientas
     ├── compact/            # Ventana de contexto y estrategias de compactación
-    ├── permission/         # Confirmación y política de permisos
-    ├── provider/           # Proveedor Groq y proveedor mock
-    ├── security/           # Validación de rutas y saneamiento de entorno
-    ├── tool/               # Herramientas de archivos, shell y DevOps
-    └── ui/                 # Estilos y banner de terminal
+    ├── permission/         # Puerta de permisos en barra lateral y políticas por riesgo
+    ├── provider/           # Proveedor Groq (con retry 429 y tool_use_failed) y mock
+    ├── security/           # Validación de rutas, clasificación de comandos y saneamiento
+    ├── tool/               # Herramientas de archivos, shell, DevOps y rutas externas
+    └── ui/                 # Tema Tokyo Night, banner animado, spinner y estilos ANSI
 ```
-

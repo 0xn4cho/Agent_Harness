@@ -5,133 +5,209 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
 const (
-	bannerBrand    = "  SC  "
-	bannerVersion  = "v0.1"
-	bannerSubtitle = "experimental agent harness · local tools + human approval"
-	bannerWidth    = 74
-	leftColWidth   = 40
-	rightColWidth  = 33
-	cmdColWidth    = 38
+	bigBannerMinWidth = 73
+	BigBannerWidth    = 70
 )
 
-// Banner keeps the identity and useful startup details together while leaving
-// the terminal focused on the next prompt.
-func Banner(model string) string {
-	directory, err := os.Getwd()
-	if err != nil {
-		directory = "unavailable"
+const bigBanner = "\n" +
+	"███████╗ ██████╗ ██╗   ██╗██╗██████╗  ██████╗ ██████╗ ██████╗ ███████╗\n" +
+	"██╔════╝██╔═══██╗██║   ██║██║██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝\n" +
+	"███████╗██║   ██║██║   ██║██║██████╔╝██║     ██║   ██║██║  ██║█████╗  \n" +
+	"╚════██║██║▄▄ ██║██║   ██║██║██╔══██╗██║     ██║   ██║██║  ██║██╔══╝  \n" +
+	"███████║╚██████╔╝╚██████╔╝██║██████╔╝╚██████╗╚██████╔╝██████╔╝███████╗\n" +
+	"╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝\n"
+
+type StartupInfo struct {
+	Workspace string
+	RulesFile string
+	Models    string
+	MockMode  bool
+}
+
+type rgb struct{ r, g, b uint8 }
+
+var (
+	bannerGradStart = rgb{122, 162, 247}
+	bannerGradEnd   = rgb{125, 207, 255}
+	bannerShadow    = rgb{59, 66, 97}
+	shineBlockPeak  = rgb{235, 244, 255}
+	shineShadowPeak = rgb{154, 178, 232}
+	shineWeights    = [...]int{100, 82, 62, 42, 24, 10}
+)
+
+func PrintBanner(model string) {
+	fmt.Print(Banner(model))
+}
+
+func PrintAnimatedBanner(info StartupInfo) {
+	width := TermWidth()
+	if !enabled || width < bigBannerMinWidth || SuppressSpinner {
+		fmt.Print(RenderBanner(width, info))
+		return
 	}
 
-	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString(boxBorder(colorBoxBorder, "╭", "─", "╮") + "\n")
-	b.WriteString(boxLine(colorBoxBorder, "  "+paint(colorBoxBorder, "╭──────╮")+"  "+paintBold(colorTitleBlue, "SquibCode")+"  "+paint(colorSecondary, bannerVersion)) + "\n")
-	b.WriteString(boxLine(colorBoxBorder, "  "+paint(colorBoxBorder, "│")+paintBold(colorTitleBlue, bannerBrand)+paint(colorBoxBorder, "│")+"  "+paint(colorSecondary, bannerSubtitle)) + "\n")
-	b.WriteString(boxLine(colorBoxBorder, "  "+paint(colorBoxBorder, "╰──────╯")+"  "+paint(colorBoxBorder, strings.Repeat("─", 60))) + "\n")
-	b.WriteString(boxLine(colorBoxBorder, "") + "\n")
-	b.WriteString(splitBoxLine(
-		metaItem("◈", "Model", 9, shorten(model, 23), colorData),
-		metaItem("✦", "Tools", 8, "4 available", colorData),
-	) + "\n")
-	b.WriteString(splitBoxLine(
-		metaItem("■", "Workspace", 9, formatWorkspace(directory, 23), colorData),
-		metaItem("●", "Approval", 8, "Human approval", colorGreen),
-	) + "\n")
-	b.WriteString(splitBoxLine(
-		metaItem("●", "Author", 9, shorten("github.com/0xn4cho", 23), colorData),
-		"",
-	) + "\n")
-	b.WriteString(boxBorder(colorBoxBorder, "╰", "─", "╯") + "\n")
-	b.WriteString("\n")
-	b.WriteString(Welcome() + "\n")
-	b.WriteString("    " + paint(colorSecondary, "Your local AI development environment is ready.") + "\n")
-	b.WriteString("    " + paint(colorSecondary, "Ask me to develop, analyze or troubleshoot your projects.") + "\n")
-	b.WriteString("\n")
-	b.WriteString(boxBorder(colorPanelBorder, "╭", "─", "╮") + "\n")
-	b.WriteString(boxLine(colorPanelBorder, "  "+paintBold(colorYellow, "✦")+" "+paintBold(colorTitleBlue, "QUICK COMMANDS")) + "\n")
-	b.WriteString(cmdRow(quickCmd("/compact", "Compact context"), quickCmd("exit", "Exit SquibCode")) + "\n")
-	b.WriteString(boxBorder(colorPanelBorder, "╰", "─", "╯") + "\n")
-	return b.String()
+	fmt.Print("\x1b[?25l")
+	defer fmt.Print("\x1b[?25h")
+
+	fmt.Print("\n")
+	first := true
+	for shineCol := -4; shineCol <= BigBannerWidth+16; shineCol += 5 {
+		if !first {
+			fmt.Print("\x1b[6A\r")
+		}
+		first = false
+		fmt.Print(AnimatedArt(shineCol))
+		time.Sleep(15 * time.Millisecond)
+	}
+	fmt.Print("\x1b[6A\r")
+	fmt.Print(AnimatedArt(-1))
+	fmt.Print("\n" + RenderBannerFooter(width, info))
 }
 
-func Welcome() string {
-	return "  " + paintBold(colorTitleBlue, ">") + " " + paintBold(colorData, "Welcome to SquibCode!")
+func Banner(model string) string {
+	return BannerText(TermWidth(), model)
 }
 
-func metaItem(icon, label string, labelWidth int, value string, valueColor rgb) string {
-	return "  " + paint(colorTitleBlue, icon) + " " +
-		paint(colorSecondary, fmt.Sprintf("%-*s :", labelWidth, label)) + " " +
-		paint(valueColor, value)
+func BannerText(width int, model string) string {
+	return RenderBanner(width, StartupInfo{Models: model})
 }
 
-func splitBoxLine(left, right string) string {
-	leftPad := max(0, leftColWidth-visibleWidth(left))
-	rightPad := max(0, rightColWidth-visibleWidth(right))
-	return paint(colorBoxBorder, "│") +
-		left + strings.Repeat(" ", leftPad) +
-		paint(colorBoxBorder, "│") +
-		right + strings.Repeat(" ", rightPad) +
-		paint(colorBoxBorder, "│")
+func RenderBanner(width int, info StartupInfo) string {
+	if width >= bigBannerMinWidth {
+		return "\n" + AnimatedArt(-1) + "\n" + RenderBannerFooter(width, info)
+	}
+	return "\n  " + Cyan("SQUIBCODE") + Dim("  ·  coding & DevOps agent") + "\n" +
+		RenderBannerFooter(width, info)
 }
 
-func quickCmd(cmd, desc string) string {
-	return paint(colorCmdBlue, fmt.Sprintf("%-9s", cmd)) + paint(colorSecondary, " · "+desc)
+func RenderBannerFooter(width int, info StartupInfo) string {
+	workspace := strings.TrimSpace(info.Workspace)
+	if workspace == "" {
+		workspace = currentWorkspaceLabel()
+	}
+
+	var status strings.Builder
+	status.WriteString("  ")
+	status.WriteString(Dim("workspace ") + Text(workspace))
+	if rules := strings.TrimSpace(info.RulesFile); rules != "" {
+		status.WriteString(Dim(" · reglas ") + Text(filepath.Base(rules)) + " " + Success("✓"))
+	}
+	if models := strings.TrimSpace(info.Models); models != "" {
+		status.WriteString(Dim(" · modelos ") + Cyan(models))
+	}
+	if info.MockMode {
+		status.WriteString(Dim(" · ") + Warn("mock"))
+	}
+
+	ruleWidth := 68
+	if width < bigBannerMinWidth {
+		if width <= 0 {
+			ruleWidth = 44
+		} else {
+			ruleWidth = min(max(width-4, 24), 48)
+		}
+	}
+
+	return status.String() + "\n" +
+		"  " + Dim("/help · /roles · /compact · /clear · exit") + "\n" +
+		"  " + Border(strings.Repeat("─", ruleWidth)) + "\n\n"
 }
 
-func cmdRow(left, right string) string {
-	leftPad := max(0, cmdColWidth-visibleWidth(left))
-	return boxLine(colorPanelBorder, "  "+left+strings.Repeat(" ", leftPad)+right)
+func AnimatedArt(shineCol int) string {
+	trimmed := strings.Trim(bigBanner, "\n")
+	if !enabled {
+		return trimmed + "\n"
+	}
+
+	var sb strings.Builder
+	for row, line := range strings.Split(trimmed, "\n") {
+		col := 0
+		for _, r := range line {
+			if r == ' ' {
+				sb.WriteRune(' ')
+				col++
+				continue
+			}
+			c, bold := bannerCellColor(r, col, row, shineCol)
+			if bold {
+				fmt.Fprintf(&sb, "\x1b[1;38;2;%d;%d;%dm%c\x1b[0m", c.r, c.g, c.b, r)
+			} else {
+				fmt.Fprintf(&sb, "\x1b[38;2;%d;%d;%dm%c\x1b[0m", c.r, c.g, c.b, r)
+			}
+			col++
+		}
+		sb.WriteByte('\n')
+	}
+	return sb.String()
 }
 
-func boxBorder(c rgb, left, fill, right string) string {
-	return paint(c, left+strings.Repeat(fill, bannerWidth)+right)
+func bannerCellColor(r rune, col, row, shineCol int) (rgb, bool) {
+	isBlock := r == '█' || r == '▄' || r == '▀'
+	base := bannerShadow
+	peak := shineShadowPeak
+	if isBlock {
+		base = lerpRGB(bannerGradStart, bannerGradEnd, col, BigBannerWidth-1)
+		peak = shineBlockPeak
+	}
+
+	if shineCol < 0 {
+		return base, isBlock
+	}
+
+	effCol := col + row*2
+	diff := effCol - shineCol
+	var d int
+	if diff >= 0 {
+		d = diff
+	} else {
+		d = (-diff + 1) / 2
+	}
+	if d >= len(shineWeights) {
+		return base, isBlock
+	}
+	return blendRGB(base, peak, shineWeights[d]), isBlock
 }
 
-func boxLine(c rgb, content string) string {
-	padding := max(0, bannerWidth-visibleWidth(content))
-	return paint(c, "│") + content + strings.Repeat(" ", padding) + paint(c, "│")
+func lerpRGB(a, b rgb, pos, maxPos int) rgb {
+	if maxPos <= 0 {
+		return a
+	}
+	if pos <= 0 {
+		return a
+	}
+	if pos >= maxPos {
+		return b
+	}
+	return rgb{
+		r: uint8(int(a.r) + (int(b.r)-int(a.r))*pos/maxPos),
+		g: uint8(int(a.g) + (int(b.g)-int(a.g))*pos/maxPos),
+		b: uint8(int(a.b) + (int(b.b)-int(a.b))*pos/maxPos),
+	}
 }
 
-func formatWorkspace(directory string, maxLen int) string {
-	if directory == "" || directory == "unavailable" {
+func blendRGB(base, target rgb, pct int) rgb {
+	return rgb{
+		r: uint8(int(base.r) + (int(target.r)-int(base.r))*pct/100),
+		g: uint8(int(base.g) + (int(target.g)-int(base.g))*pct/100),
+		b: uint8(int(base.b) + (int(target.b)-int(base.b))*pct/100),
+	}
+}
+
+func currentWorkspaceLabel() string {
+	dir, err := os.Getwd()
+	if err != nil || dir == "" {
 		return "unavailable"
 	}
-	base := filepath.Base(directory)
+	base := filepath.Base(dir)
 	if base != "" && base != "." && base != string(filepath.Separator) && base != "/" {
-		return shorten("~/"+base, maxLen)
+		return "~/" + base
 	}
-	return shortenPath(directory, maxLen)
-}
-
-func shorten(s string, maxLen int) string {
-	if maxLen <= 0 {
-		return ""
-	}
-	if utf8.RuneCountInString(s) <= maxLen {
-		return s
-	}
-	if maxLen == 1 {
-		return "…"
-	}
-	runes := []rune(s)
-	return "…" + string(runes[len(runes)-(maxLen-1):])
-}
-
-func shortenPath(path string, maxLen int) string {
-	if utf8.RuneCountInString(path) <= maxLen {
-		return path
-	}
-	if volume := strings.Index(path, `\`); volume > 0 && maxLen > volume+4 {
-		prefix := path[:volume+1] + "…\\"
-		tailLength := maxLen - utf8.RuneCountInString(prefix)
-		runes := []rune(path)
-		return prefix + string(runes[len(runes)-tailLength:])
-	}
-	return shorten(path, maxLen)
+	return dir
 }
 
 func visibleWidth(s string) int {

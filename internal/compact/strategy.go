@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DefaultMaxTokens   = 12000
+	DefaultMaxTokens   = 4500
 	DefaultMaxMessages = 25
 )
 

@@ -137,6 +137,31 @@ func ValidateSafePath(targetPath string) (string, error) {
 	return realTarget, nil
 }
 
+func ValidateExternalPath(targetPath string) (string, error) {
+	if strings.TrimSpace(targetPath) == "" {
+		return "", fmt.Errorf("path cannot be empty")
+	}
+
+	absPath, err := filepath.Abs(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path %q: %w", targetPath, err)
+	}
+	absPath = filepath.Clean(absPath)
+	if err := checkSensitivePatterns(absPath); err != nil {
+		return "", err
+	}
+
+	realPath, err := resolvePathWithSymlinks(absPath)
+	if err != nil {
+		return "", err
+	}
+	realPath = normalizeVolumePath(realPath)
+	if err := checkSensitivePatterns(realPath); err != nil {
+		return "", err
+	}
+	return realPath, nil
+}
+
 func resolvePathWithSymlinks(absPath string) (string, error) {
 	curr := filepath.Clean(absPath)
 	var tail []string
